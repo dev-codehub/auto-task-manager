@@ -17,7 +17,7 @@ change and silently ignore a field your role may not set.
 ## Setup
 
 **The plugin.** Install it from your plugin marketplace, or load a local copy
-for testing with `claude --plugin-dir path/to/redmine-sync`. While it is
+for testing with `claude --plugin-dir path/to/auto-task-manager`. While it is
 enabled, its `bin/` is on the Bash tool's PATH, so `redmine-sync` runs by name.
 
 **Credentials**, once per person. Either export `REDMINE_API_KEY`, or store the
