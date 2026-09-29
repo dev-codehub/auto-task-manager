@@ -16,9 +16,16 @@ change and silently ignore a field your role may not set.
 
 ## Setup
 
-**The plugin.** Install it from your plugin marketplace, or load a local copy
-for testing with `claude --plugin-dir path/to/auto-task-manager`. While it is
-enabled, its `bin/` is on the Bash tool's PATH, so `redmine-sync` runs by name.
+**The plugin.**
+
+```
+/plugin marketplace add dev-codehub/auto-task-manager
+/plugin install auto-task-manager@auto-task-manager
+```
+
+Or load a local copy for testing with
+`claude --plugin-dir path/to/auto-task-manager`. While it is enabled, its
+`bin/` is on the Bash tool's PATH, so `redmine-sync` runs by name.
 
 **Credentials**, once per person. Either export `REDMINE_API_KEY`, or store the
 key (from *My account* → *API access key* in Redmine) alone in a file:
