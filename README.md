@@ -130,7 +130,7 @@ for by name with `--only`.
 ## Development
 
 ```bash
-cd tools/redmine-sync && python3 -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -v
 ```
 
 Python 3.9+, standard library only. The tests run against an in-memory fake
