@@ -16,29 +16,18 @@ Este guia é para quem recebeu o `.zip` diretamente, sem passar pelo
   chmod 600 ~/.config/redmine-sync/credentials
   ```
   (chave em *My account → API access key* no teu Redmine)
-- Cria um ficheiro `.redmine.json` **dentro dessa mesma pasta extraída**
-  (`~/auto-task-manager/.redmine.json`) — não precisa de ser um
-  repositório git nem uma pasta separada, o CLI só procura este ficheiro:
+- Copia o template incluído no zip e preenche os campos marcados
+  `PREENCHE:` (deixa `issue_key` como está):
   ```bash
   cd ~/auto-task-manager
-  cat > .redmine.json <<'EOF'
-  {
-    "url": "https://o-teu-redmine",
-    "project": "identificador-do-projeto",
-    "text_format": "markdown",
-    "issue_key": "subject_prefix"
-  }
-  EOF
+  cp redmine.example.json .redmine.json
   ```
-  - `url` — o endereço do teu Redmine (ex: `https://redmine.aempresa.pt`),
-    sem barra final.
-  - `project` — o identificador do projeto, não o nome. Está no URL do
-    projeto no Redmine: `.../projects/<identificador>/...`.
-  - `text_format` — `"markdown"` ou `"textile"`, conforme o que o teu
-    Redmine usa (pergunta a quem administra a instância se não souberes).
-  - `issue_key` — deixa `"subject_prefix"` (é o que as duas skills
-    esperam); só usa `"id_only"` se souberes que é esse o caso do teu
-    projeto.
+  Depois abre `.redmine.json` num editor de texto e substitui cada
+  `PREENCHE: ...` pelo valor real - `url` é o endereço do teu Redmine,
+  `project` é o identificador do projeto (não o nome; está no URL
+  `.../projects/<identificador>/...`), `text_format` é `markdown` ou
+  `textile` conforme o teu Redmine (pergunta a quem administra a
+  instância se não souberes).
   - Trabalha sempre **a partir de dentro desta pasta** (`cd
     ~/auto-task-manager` antes de abrires o Claude Code ou o Codex) — é
     isso que lhes diz a que Redmine e a que projeto se referem os
