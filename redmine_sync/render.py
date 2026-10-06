@@ -17,6 +17,7 @@ def format_plan(plan: Plan) -> str:
         header += f", {applied} already applied"
     header += f" (notes in {plan.text_format})"
     out: List[str] = [header]
+    out += [f"note: {w}" for w in plan.warnings]
     for row in plan.rows:
         head = f"#{row.issue_id}" if row.issue_id is not None else "(unresolved)"
         out.append("")

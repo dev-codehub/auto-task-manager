@@ -34,10 +34,16 @@ update; the person approves it; only then is anything written.
    key silently disappears.
 
 3. **Write the update file** at `<updates_dir>/<session>.json`, where `<session>`
-   is today's date `YYYY-MM-DD`, suffixed `-2`, `-3`, ... if that file exists:
+   is today's date plus a short topic, `YYYY-MM-DD-<topic>` (lowercase, hyphens,
+   e.g. `2026-10-06-p2-diagnostics`). The session id is printed at the end of
+   every comment as `_redmine-sync: <session>_`, and the comment already carries
+   its own date, so a bare date tells the reader of the issue nothing; the topic
+   says what the update was and names its file. Use a different topic for a second
+   update on the same day, not `-2`. (A bare date still works; the dry-run only
+   notes it.)
 
    ```json
-   {"session": "YYYY-MM-DD", "updates": [
+   {"session": "YYYY-MM-DD-<topic>", "updates": [
      {"issue": "KEY", "note": "...", "done_ratio": 60, "status": "In Progress"}
    ]}
    ```

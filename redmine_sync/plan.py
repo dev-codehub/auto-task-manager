@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -101,10 +102,27 @@ class Plan:
     errors: List[str]
     user_id: int
     text_format: str = "textile"
+    # Plan-level notes for the dry-run (never block a write), as opposed to the
+    # per-issue Row.warnings.
+    warnings: List[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
         return not self.errors
+
+
+_DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}(-\d+)?")
+
+
+def session_warnings(session: str) -> List[str]:
+    """The session id ends up in every comment as `_redmine-sync: <session>_`,
+    next to a comment that already carries its date. A bare date (or date-N)
+    tells the reader of the issue nothing; a short topic does."""
+    if _DATE_ONLY.fullmatch(session):
+        return [f"session '{session}' is only a date; name it YYYY-MM-DD-<topic> "
+                f"(e.g. {session[:10]}-onboarding-flow) so the marker in Redmine says "
+                f"what this update was"]
+    return []
 
 
 def build_plan(client: Client, config: Config, update_file: UpdateFile,
@@ -175,4 +193,5 @@ def build_plan(client: Client, config: Config, update_file: UpdateFile,
                 row.warnings.append(f"% Done goes down, {row.current_done} -> {update.done_ratio}")
 
     return Plan(session=update_file.session, rows=rows, errors=errors, user_id=user_id,
-               text_format=config.text_format)
+               text_format=config.text_format,
+               warnings=session_warnings(update_file.session))

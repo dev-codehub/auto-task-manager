@@ -63,13 +63,17 @@ repository configured with `issue_key: "id_only"`.
 
 ```bash
 redmine-sync status EX-01.2 '#1042'            # read-only
-redmine-sync apply redmine/session-updates/2026-01-15.json          # dry run
-redmine-sync apply redmine/session-updates/2026-01-15.json --write  # write
+redmine-sync apply redmine/session-updates/2026-01-15-onboarding-flow.json          # dry run
+redmine-sync apply redmine/session-updates/2026-01-15-onboarding-flow.json --write  # write
 ```
 
 Re-running `--write` is safe: each comment carries a
 `_redmine-sync: <session>_` line, and issues that already have it are skipped,
 so an interrupted run resumes where it stopped.
+
+Name the session `YYYY-MM-DD-<topic>` (e.g. `2026-01-15-onboarding-flow`): the
+id is the only part of the marker a reader of the issue sees, and the comment
+already carries its date. A bare date still works; the dry-run notes it.
 
 ## Commands: redmine-backlog (create, relate, repair)
 

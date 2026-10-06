@@ -134,6 +134,22 @@ class PlanTests(unittest.TestCase):
         p = self.plan(Update("EX-01.1", "a", done_ratio=30))
         self.assertTrue(any("goes down" in w for w in p.rows[0].warnings))
 
+    def test_a_date_only_session_warns_and_suggests_a_topic(self):
+        # The marker is the only thing a reader sees in Redmine, and the
+        # comment already carries its date. A bare date (or date-N) says nothing.
+        for bare in ("2026-10-06", "2026-10-06-2"):
+            p = self.plan(Update("EX-01.1", "a"), session=bare)
+            self.assertTrue(p.ok, p.errors)  # a warning, never a block
+            self.assertTrue(any("only a date" in w for w in p.warnings), bare)
+
+    def test_a_session_with_a_topic_does_not_warn(self):
+        p = self.plan(Update("EX-01.1", "a"), session="2026-10-06-p2-diagnostics")
+        self.assertEqual(p.warnings, [])
+
+    def test_the_dry_run_shows_the_session_warning(self):
+        text = format_plan(self.plan(Update("EX-01.1", "a"), session="2026-10-06"))
+        self.assertIn("only a date", text)
+
     def test_done_not_multiple_of_ten_warns(self):
         p = self.plan(Update("EX-01.1", "a", done_ratio=45))
         self.assertTrue(any("multiple of 10" in w for w in p.rows[0].warnings))
