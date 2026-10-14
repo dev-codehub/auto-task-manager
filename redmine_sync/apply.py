@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .client import Client, RedmineError
 from .plan import Plan, Row, has_marker, with_marker
@@ -39,6 +39,16 @@ def apply_plan(client: Client, plan: Plan) -> Report:
     return report
 
 
+def _verify_custom_fields(issue: dict, pending: List[Tuple[int, str, str]],
+                          verified: List[str]) -> None:
+    live = {cf["id"]: cf.get("value") for cf in issue.get("custom_fields", [])}
+    for field_id, name, value in pending:
+        if live.get(field_id) != value:
+            raise ApplyError(
+                f"{name} was sent as '{value}' but reads back as {live.get(field_id)!r}")
+        verified.append(f"{name} = {value}")
+
+
 def _apply_row(client: Client, session: str, user_id: int, row: Row) -> Outcome:
     assert row.issue_id is not None
     key = row.update.issue
@@ -48,23 +58,35 @@ def _apply_row(client: Client, session: str, user_id: int, row: Row) -> Outcome:
 
     verified: List[str] = []
     warnings = list(row.warnings)
+    custom_fields_pending = list(row.custom_fields)
 
     if row.target_status_id is not None and issue["status"]["id"] != row.target_status_id:
         before = issue["status"]["name"]
-        issue = client.write_and_reread(row.issue_id, {"status_id": row.target_status_id})
+        status_fields = {"status_id": row.target_status_id}
+        if custom_fields_pending:
+            status_fields["custom_fields"] = [{"id": i, "value": v}
+                                              for i, _, v in custom_fields_pending]
+        issue = client.write_and_reread(row.issue_id, status_fields)
         if issue["status"]["id"] != row.target_status_id:
             raise ApplyError(
                 f"status '{before}' -> '{row.target_status}' was not applied - the workflow "
                 f"does not allow it for your role; nothing else was written to this issue")
         verified.append(f"status {before} -> {row.target_status}")
+        if custom_fields_pending:
+            _verify_custom_fields(issue, custom_fields_pending, verified)
+            custom_fields_pending = []
 
     fields = {"notes": with_marker(row.update.note, session)}
     if row.target_done is not None:
         fields["done_ratio"] = row.target_done
+    if custom_fields_pending:
+        fields["custom_fields"] = [{"id": i, "value": v} for i, _, v in custom_fields_pending]
     issue = client.write_and_reread(row.issue_id, fields)
     if not has_marker(issue.get("journals"), session, user_id):
         raise ApplyError("the comment was sent but is not on the issue")
     verified.append("comment recorded")
+    if custom_fields_pending:
+        _verify_custom_fields(issue, custom_fields_pending, verified)
     if row.target_done is not None:
         if issue.get("done_ratio") == row.target_done:
             verified.append(f"% Done {row.target_done}")

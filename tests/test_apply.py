@@ -4,7 +4,7 @@ import unittest
 
 from redmine_sync.apply import apply_plan
 from redmine_sync.client import Client
-from redmine_sync.config import Config
+from redmine_sync.config import Config, RequiredField
 from redmine_sync.plan import build_plan, marker_line
 from redmine_sync.render import format_report
 from redmine_sync.updatefile import Update, UpdateFile
@@ -122,6 +122,52 @@ class ApplyTests(unittest.TestCase):
         text = format_report(self.run_apply(Update("EX-01.1", "one")))
         self.assertIn("stopped", text)
         self.assertIn("re-run", text)
+
+
+class RequiredFieldsOnCloseApplyTests(unittest.TestCase):
+    def setUp(self):
+        self.fake = demo_fake().start()
+        self.client = Client(self.fake.url, self.fake.key)
+        self.config = Config(url=self.fake.url, project="demo", required_fields_on_close=(
+            RequiredField(id=1, key="reviewed", name="Reviewed", values=("Yes", "No")),
+        ))
+
+    def tearDown(self):
+        self.fake.stop()
+
+    def plan(self, *updates):
+        return build_plan(self.client, self.config, UpdateFile("s1", list(updates)))
+
+    def test_custom_field_is_sent_with_the_status_change_and_verified(self):
+        plan = self.plan(Update("EX-01.1", "closing it", status="Closed", done_ratio=100,
+                                custom_fields={"reviewed": "Yes"}))
+        self.assertTrue(plan.ok, plan.errors)
+        report = apply_plan(self.client, plan)
+        self.assertIsNone(report.error)
+        self.assertEqual(self.fake.issues[101]["custom_fields"], {1: "Yes"})
+        self.assertIn("Reviewed = Yes", report.outcomes[0].verified)
+        # sent together with the status change, not a separate PUT
+        status_puts = [f for _, f in self.fake.puts if "status_id" in f]
+        self.assertEqual(status_puts[0].get("custom_fields"), [{"id": 1, "value": "Yes"}])
+
+    def test_custom_field_with_no_status_change_goes_on_the_comment_put(self):
+        self.fake.issues[101]["status_id"] = 4  # already Closed
+        plan = self.plan(Update("EX-01.1", "note only", custom_fields={"reviewed": "No"}))
+        self.assertTrue(plan.ok, plan.errors)
+        report = apply_plan(self.client, plan)
+        self.assertIsNone(report.error)
+        self.assertEqual(self.fake.issues[101]["custom_fields"], {1: "No"})
+        self.assertIn("Reviewed = No", report.outcomes[0].verified)
+
+    def test_mismatched_readback_raises(self):
+        # The instance silently ignores a write to a field it does not accept - same
+        # defensive posture as the status/comment checks above.
+        self.fake.derived_custom_fields = {1}
+        plan = self.plan(Update("EX-01.1", "closing it", status="Closed", done_ratio=100,
+                                custom_fields={"reviewed": "Yes"}))
+        report = apply_plan(self.client, plan)
+        self.assertIsNotNone(report.error)
+        self.assertIn("Reviewed", report.error)
 
 
 if __name__ == "__main__":
