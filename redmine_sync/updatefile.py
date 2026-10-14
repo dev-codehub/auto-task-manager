@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 from .keys import unknown_keys_problem
 
 _SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-_ROW_KEYS = {"issue", "note", "done_ratio", "status"}
+_ROW_KEYS = {"issue", "note", "done_ratio", "status", "custom_fields"}
 
 
 class UpdateFileError(Exception):
@@ -21,6 +21,10 @@ class Update:
     note: str
     done_ratio: Optional[int] = None
     status: Optional[str] = None
+    # Keyed by a RequiredField's 'key' (from .redmine.json), not by field id or
+    # name - this file knows nothing about which fields the instance requires or
+    # what values it accepts. plan.py cross-checks both against the live config.
+    custom_fields: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -76,10 +80,19 @@ def parse_update_file(text: str, source: str = "<update file>") -> UpdateFile:
         status = row.get("status") if "status" in row else None
         if "status" in row and (not isinstance(status, str) or not status.strip()):
             problems.append(f"{where}: 'status' must be a non-empty status name")
+        custom_fields = row.get("custom_fields", {}) if "custom_fields" in row else {}
+        if "custom_fields" in row:
+            if not isinstance(custom_fields, dict) or not all(
+                    isinstance(k, str) and k and isinstance(v, str) and v.strip()
+                    for k, v in custom_fields.items()):
+                problems.append(f"{where}: 'custom_fields' must be an object of "
+                                f"non-empty string values, keyed by non-empty strings")
+                custom_fields = {}
         updates.append(Update(issue=issue if isinstance(issue, str) else "",
                               note=note if isinstance(note, str) else "",
                               done_ratio=done if type(done) is int else None,
-                              status=status.strip() if isinstance(status, str) else None))
+                              status=status.strip() if isinstance(status, str) else None,
+                              custom_fields=dict(custom_fields)))
 
     if problems:
         raise UpdateFileError(f"{source}:\n" + "\n".join(f"  - {p}" for p in problems))
