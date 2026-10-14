@@ -36,7 +36,9 @@ def format_plan(plan: Plan) -> str:
             out.append(f"  done    {_pct(row.current_done)}")
         else:
             out.append(f"  done    {_pct(row.current_done)} -> {_pct(row.target_done)}")
-        lines = row.update.note.strip().splitlines()
+        for _, name, value in row.custom_fields:
+            out.append(f"  {name} = {value}")
+        lines =row.update.note.strip().splitlines()
         for line in lines[:3]:
             out.append(f"  | {line}")
         if len(lines) > 3:
