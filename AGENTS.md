@@ -19,7 +19,11 @@ files Claude Code reads from `skills/`. There is one copy of each
 
 2. **Credentials and `.redmine.json`** are unchanged from the main
    [README](README.md) - same `REDMINE_API_KEY` / `~/.config/redmine-sync/credentials`,
-   same per-repository `.redmine.json`.
+   same per-repository `.redmine.json`. If an instance requires custom
+   fields to close an issue, `.redmine.json` declares them under
+   `required_fields_on_close` and an update file sets them per row with
+   `custom_fields` (see the README); ask the person for those values, do not
+   guess them.
 
 3. Codex discovers the skills from `.agents/skills/` at the repository
    root automatically - nothing else to enable.
