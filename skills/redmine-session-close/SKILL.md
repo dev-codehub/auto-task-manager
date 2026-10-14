@@ -55,6 +55,15 @@ update; the person approves it; only then is anything written.
    - `done_ratio` and `status` (optional): only when the evidence supports a
      change; omit them otherwise. Use `Closed` (or the instance's equivalent)
      only when the work is finished and verified.
+   - `custom_fields` (optional, an object): only for the fields declared in
+     `.redmine.json`'s `required_fields_on_close`, keyed by their `key` there
+     (never by the field's numeric id or its display name). If this instance
+     declares any and the update closes an issue at 100% done, `redmine-sync
+     apply` reports an error naming the missing field(s) and the values each
+     accepts, rather than sending an incomplete write - fill them in and
+     dry-run again. Ask the person for the values rather than guessing; the
+     dry-run lists each field it will set, and its errors list what a field
+     accepts.
 
 4. **Dry-run:** `redmine-sync apply <file>`. If it reports errors, fix the file
    and dry-run again. Then show the person the complete output, unedited.
