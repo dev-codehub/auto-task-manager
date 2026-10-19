@@ -7,7 +7,16 @@ It reproduces, on purpose, the ways a real site disagrees with a naive client:
   Code that trusts the 2xx is wrong; it must read the issue back.
 * search is paged 2 issues at a time with ``nextPageToken``, ``createmeta``
   and comments are paged by ``startAt``/``maxResults``.
+* ``stuck``: issue keys whose transitions answer success but leave the status
+  where it was (an automation rule or post-function moving it back).
+* ``forbidden``: issue keys where every write (edit, comment, transition)
+  answers 403.
 * ``answer_html`` (a login page where JSON should be) and ``redirect_to``.
+
+It answers 400 to payload shapes real Jira rejects: a comment that is not
+``{"body": <ADF doc>}``, a transition without ``{"transition": {"id": ...}}``
+or with a field that is not on the transition's screen, an edit without
+``{"fields": {...}}``, and a non-number for a field whose schema is number.
 
 Every call is logged in ``requests``; every mutating call is also logged in
 ``writes`` as (method, path, body). ``POST /search/jql`` is a read, so it is
@@ -42,6 +51,7 @@ class FakeJira:
         self.fields: List[dict] = []
         self.ignored_fields: Set[str] = set()
         self.forbidden: Set[str] = set()
+        self.stuck: Set[str] = set()
         self.answer_html = False
         self.redirect_to: Optional[str] = None
         self.hits = 0
@@ -157,20 +167,49 @@ class FakeJira:
         self._store(self.issues[issue_key]["fields"], stored)
         return self.issues[issue_key], None
 
+    def _shape_errors(self, fields: dict) -> dict:
+        """Jira's answer to a non-number sent to a number field."""
+        numbers = {f["id"] for f in self.fields if (f.get("schema") or {}).get("type") == "number"}
+        return {fid: "Operation value must be a number."
+                for fid, value in fields.items()
+                if fid in numbers and (type(value) not in (int, float))}
+
+    def _edit(self, issue: dict, body: dict) -> Optional[dict]:
+        fields = body.get("fields")
+        if not isinstance(fields, dict):
+            return {"errorMessages": ['The request must be {"fields": {...}}.'], "errors": {}}
+        errors = self._shape_errors(fields)
+        if errors:
+            return {"errorMessages": [], "errors": errors}
+        self._store(issue["fields"], fields)
+        return None
+
     def _transition(self, issue: dict, body: dict) -> Optional[dict]:
-        tid = str((body.get("transition") or {}).get("id", ""))
+        ref = body.get("transition")
+        tid = str(ref.get("id", "")) if isinstance(ref, dict) else ""
+        if not tid:
+            return {"errorMessages": ['The request must be {"transition": {"id": "<id>"}}.'],
+                    "errors": {}}
         available = self.workflow.get(issue["fields"]["status"]["name"], [])
         chosen = next((t for t in available if t["id"] == tid), None)
         if chosen is None:
             return {"errorMessages": [f"Transition id '{tid}' is not valid for this issue."],
                     "errors": {}}
         sent = body.get("fields") or {}
-        missing = {fid: f"{meta.get('name', fid)} is required."
-                   for fid, meta in (chosen.get("fields") or {}).items()
-                   if meta.get("required") and fid not in sent}
-        if missing:
-            return {"errorMessages": [], "errors": missing}
-        issue["fields"]["status"] = {"name": chosen["to"]}
+        if not isinstance(sent, dict):
+            return {"errorMessages": ["'fields' must be an object."], "errors": {}}
+        screen = chosen.get("fields") or {}
+        errors = {fid: f"Field '{fid}' cannot be set. It is not on the appropriate screen, "
+                       f"or unknown."
+                  for fid in sent if fid not in screen}
+        errors.update({fid: f"{meta.get('name', fid)} is required."
+                       for fid, meta in screen.items()
+                       if meta.get("required") and fid not in sent})
+        errors.update(self._shape_errors(sent))
+        if errors:
+            return {"errorMessages": [], "errors": errors}
+        if issue["key"] not in self.stuck:
+            issue["fields"]["status"] = {"name": chosen["to"]}
         self._store(issue["fields"], sent)
         return None
 
@@ -217,7 +256,8 @@ def demo_fake(email: str = "tester@example.com", token: str = "test-token") -> F
     ]
     fake.fields = [
         {"id": "summary", "name": "Summary", "custom": False},
-        {"id": "customfield_10016", "name": "Story point estimate", "custom": True},
+        {"id": "customfield_10016", "name": "Story point estimate", "custom": True,
+         "schema": {"type": "number"}},
     ]
     for type_id in ("10001", "10002", "10003", "10004"):
         fake.create_fields[type_id] = [
@@ -370,7 +410,9 @@ def _handler_for(fake: FakeJira):
                                         "errors": {}})
             if issue["key"] in fake.forbidden:
                 return self._send(403, {"errorMessages": ["no permission"], "errors": {}})
-            fake._store(issue["fields"], body.get("fields") or {})
+            problem = fake._edit(issue, body)
+            if problem:
+                return self._send(400, problem)
             self._send(204)
 
         def do_POST(self):
@@ -406,6 +448,8 @@ def _handler_for(fake: FakeJira):
                     return self._send(404, {"errorMessages": ["Issue does not exist or you "
                                                               "do not have permission to see it."],
                                             "errors": {}})
+                if issue["key"] in fake.forbidden:
+                    return self._send(403, {"errorMessages": ["no permission"], "errors": {}})
                 if match.group(2) == "comment":
                     doc = body.get("body")
                     if not isinstance(doc, dict) or doc.get("type") != "doc":

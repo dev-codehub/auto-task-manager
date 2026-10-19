@@ -185,5 +185,70 @@ class JiraClientTests(unittest.TestCase):
             self.client.create_link("Nope", "SCRUM-2", "SCRUM-3")
 
 
+class FakeJiraShapeTests(unittest.TestCase):
+    """The fake answers 400 to the payload shapes real Jira rejects, so a client
+    that sends the wrong shape fails here instead of in production."""
+
+    def setUp(self):
+        self.fake = demo_fake().start()
+        self.client = Client(self.fake.url, self.fake.email, self.fake.token)
+
+    def tearDown(self):
+        self.fake.stop()
+
+    def raw(self, method, path, body):
+        req = urllib.request.Request(self.fake.url + "/rest/api/3" + path,
+                                     data=json.dumps(body).encode("utf-8"), method=method)
+        req.add_header("Authorization", "Basic " + base64.b64encode(
+            b"tester@example.com:test-token").decode("ascii"))
+        req.add_header("Content-Type", "application/json")
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            urllib.request.urlopen(req)
+        cm.exception.close()
+        return cm.exception.code
+
+    def test_do_transition_sends_the_transition_id_wrapper(self):
+        self.client.do_transition("SCRUM-1", "11", {})
+        self.assertEqual(self.fake.writes, [("POST", "/rest/api/3/issue/SCRUM-1/transitions",
+                                             {"transition": {"id": "11"}})])
+
+    def test_transition_without_transition_id_is_rejected(self):
+        for body in ({"id": "11"}, {"transition": "11"}, {"transition": {}}):
+            self.assertEqual(self.raw("POST", "/issue/SCRUM-1/transitions", body), 400, body)
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["status"]["name"], "To Do")
+
+    def test_transition_field_that_is_not_on_its_screen_is_rejected(self):
+        with self.assertRaises(RejectedError) as cm:
+            self.client.do_transition("SCRUM-1", "11", {"resolution": {"name": "Done"}})
+        self.assertIn("resolution", str(cm.exception))
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["status"]["name"], "To Do")
+
+    def test_issue_edit_without_the_fields_wrapper_is_rejected(self):
+        self.assertEqual(self.raw("PUT", "/issue/SCRUM-1", {"summary": "x"}), 400)
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["summary"], "Epic one")
+
+    def test_story_points_that_are_not_a_bare_number_are_rejected(self):
+        for value in ({"value": 3}, "3", [3]):
+            with self.assertRaises(RejectedError, msg=value):
+                self.client.update_issue("SCRUM-1", {"customfield_10016": value})
+        self.assertNotIn("customfield_10016", self.fake.issues["SCRUM-1"]["fields"])
+        self.client.update_issue("SCRUM-1", {"customfield_10016": 3.5})
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["customfield_10016"], 3.5)
+
+    def test_stuck_issue_answers_success_to_a_transition_but_keeps_its_status(self):
+        self.fake.stuck.add("SCRUM-1")
+        self.client.do_transition("SCRUM-1", "11", {})
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["status"]["name"], "To Do")
+
+    def test_forbidden_covers_comments_and_transitions(self):
+        self.fake.forbidden.add("SCRUM-1")
+        with self.assertRaises(ForbiddenError):
+            self.client.do_transition("SCRUM-1", "11", {})
+        with self.assertRaises(ForbiddenError):
+            self.client.add_comment("SCRUM-1", {"type": "doc", "version": 1, "content": []})
+        self.assertEqual(self.fake.issues["SCRUM-1"]["comments"], [])
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["status"]["name"], "To Do")
+
+
 if __name__ == "__main__":
     unittest.main()
