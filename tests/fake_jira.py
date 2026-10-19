@@ -15,8 +15,13 @@ It reproduces, on purpose, the ways a real site disagrees with a naive client:
 
 It answers 400 to payload shapes real Jira rejects: a comment that is not
 ``{"body": <ADF doc>}``, a transition without ``{"transition": {"id": ...}}``
-or with a field that is not on the transition's screen, an edit without
-``{"fields": {...}}``, and a non-number for a field whose schema is number.
+or with a field that is not on the transition's screen, a create or an edit
+without ``{"fields": {...}}``, a create with a field that is not on that
+type's create screen, a description that is not an ADF doc, a parent or
+priority that is not an object naming one (a parent must also exist), a
+non-number for a field whose schema is number, and an issue link whose
+``type``, ``inwardIssue`` or ``outwardIssue`` is not ``{"name"}`` /
+``{"key"}``.
 
 Every call is logged in ``requests``; every mutating call is also logged in
 ``writes`` as (method, path, body). ``POST /search/jql`` is a read, so it is
@@ -115,8 +120,18 @@ class FakeJira:
 
     def _store(self, target: dict, fields: dict) -> None:
         for name, value in fields.items():
-            if name not in self.ignored_fields:
-                target[name] = value
+            if name in self.ignored_fields:
+                continue
+            if name == "parent" and isinstance(value, dict):
+                # Read back the way Jira answers: the parent's id and key.
+                parent = self._find_issue(value)
+                value = {"id": parent["id"], "key": parent["key"]}
+            target[name] = value
+
+    def _find_issue(self, ref: dict) -> Optional[dict]:
+        if ref.get("key"):
+            return self.issues.get(ref["key"])
+        return next((i for i in self.issues.values() if i["id"] == str(ref.get("id"))), None)
 
     def _issue_json(self, issue: dict, wanted: Optional[List[str]]) -> dict:
         fields = issue["fields"]
@@ -149,12 +164,14 @@ class FakeJira:
         return items
 
     def _create(self, fields: dict) -> Tuple[Optional[dict], Optional[dict]]:
-        project = fields.get("project") or {}
+        project = fields.get("project")
+        project = project if isinstance(project, dict) else {}
         key = project.get("key") or next(
             (k for k, p in self.projects.items() if p["id"] == project.get("id")), None)
         if key not in self.projects:
             return None, {"errorMessages": [], "errors": {"project": "valid project is required"}}
-        type_ref = fields.get("issuetype") or {}
+        type_ref = fields.get("issuetype")
+        type_ref = type_ref if isinstance(type_ref, dict) else {}
         issue_type = next((t for t in self.issue_types
                            if t["id"] == type_ref.get("id") or t["name"] == type_ref.get("name")), None)
         if issue_type is None:
@@ -162,17 +179,44 @@ class FakeJira:
         if not fields.get("summary"):
             return None, {"errorMessages": [],
                           "errors": {"summary": "You must specify a summary of the issue."}}
+        errors = self._shape_errors(fields)
+        screen = self.create_fields.get(issue_type["id"])
+        if screen is not None:
+            # parent is treated as always settable on create; a site that drops
+            # it is modelled with ignored_fields.
+            allowed = {str(f.get("fieldId") or f.get("key")) for f in screen}
+            allowed |= {"project", "issuetype", "summary", "parent"}
+            errors.update({fid: f"Field '{fid}' cannot be set. It is not on the appropriate "
+                                f"screen, or unknown." for fid in fields if fid not in allowed})
+        if errors:
+            return None, {"errorMessages": [], "errors": errors}
         stored = {k: v for k, v in fields.items() if k not in ("project", "issuetype", "summary")}
         issue_key = self.add_issue(fields["summary"], project=key, type_name=issue_type["name"])
         self._store(self.issues[issue_key]["fields"], stored)
         return self.issues[issue_key], None
 
     def _shape_errors(self, fields: dict) -> dict:
-        """Jira's answer to a non-number sent to a number field."""
+        """Jira's answers to a value of the wrong shape: a non-number for a number
+        field, a description that is not an ADF doc, a parent or priority that
+        is not an object naming one, a parent that does not exist."""
         numbers = {f["id"] for f in self.fields if (f.get("schema") or {}).get("type") == "number"}
-        return {fid: "Operation value must be a number."
-                for fid, value in fields.items()
-                if fid in numbers and (type(value) not in (int, float))}
+        errors = {fid: "Operation value must be a number."
+                  for fid, value in fields.items()
+                  if fid in numbers and (type(value) not in (int, float))}
+        description = fields.get("description")
+        if description is not None and not _is_adf(description):
+            errors["description"] = "Operation value must be an Atlassian Document."
+        if fields.get("parent") is not None:
+            parent = fields["parent"]
+            if not isinstance(parent, dict) or not (parent.get("key") or parent.get("id")):
+                errors["parent"] = "Specify the parent as an object with 'key' or 'id'."
+            elif self._find_issue(parent) is None:
+                errors["parent"] = "Could not find issue by id or key."
+        if "priority" in fields:
+            priority = fields["priority"]
+            if not isinstance(priority, dict) or not (priority.get("name") or priority.get("id")):
+                errors["priority"] = "Specify the priority as an object with 'name' or 'id'."
+        return errors
 
     def _edit(self, issue: dict, body: dict) -> Optional[dict]:
         fields = body.get("fields")
@@ -214,7 +258,15 @@ class FakeJira:
         return None
 
     def _link(self, body: dict) -> Optional[Tuple[int, dict]]:
-        type_name = (body.get("type") or {}).get("name")
+        shape = [name for name, item, wanted in (("type", body.get("type"), "name"),
+                                                  ("inwardIssue", body.get("inwardIssue"), "key"),
+                                                  ("outwardIssue", body.get("outwardIssue"), "key"))
+                 if not isinstance(item, dict) or not isinstance(item.get(wanted), str)]
+        if shape:
+            return 400, {"errorMessages": [
+                'The request must be {"type": {"name": ...}, "inwardIssue": {"key": ...}, '
+                '"outwardIssue": {"key": ...}}.'], "errors": {n: "invalid" for n in shape}}
+        type_name = body["type"]["name"]
         link_type = next((t for t in self.link_types if t["name"] == type_name), None)
         if link_type is None:
             return 404, {"errorMessages": ["No issue link type with name "
@@ -235,6 +287,11 @@ class FakeJira:
             {"id": lid, "type": dict(link_type),
              "outwardIssue": {"key": inward["key"], "id": inward["id"]}})
         return None
+
+
+def _is_adf(value) -> bool:
+    return (isinstance(value, dict) and value.get("type") == "doc" and value.get("version") == 1
+            and isinstance(value.get("content"), list))
 
 
 def demo_fake(email: str = "tester@example.com", token: str = "test-token") -> FakeJira:
@@ -431,7 +488,10 @@ def _handler_for(fake: FakeJira):
                     out["isLast"] = True
                 return self._send(200, out)
             if path == f"{API}/issue":
-                issue, error = fake._create(body.get("fields") or {})
+                if not isinstance(body.get("fields"), dict):
+                    return self._send(400, {"errorMessages": [
+                        'The request must be {"fields": {...}}.'], "errors": {}})
+                issue, error = fake._create(body["fields"])
                 if error:
                     return self._send(400, error)
                 return self._send(201, {"id": issue["id"], "key": issue["key"],

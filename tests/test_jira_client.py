@@ -235,6 +235,47 @@ class FakeJiraShapeTests(unittest.TestCase):
         self.client.update_issue("SCRUM-1", {"customfield_10016": 3.5})
         self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["customfield_10016"], 3.5)
 
+    def test_create_without_the_fields_wrapper_or_with_wrong_shapes_is_rejected(self):
+        self.fake.create_fields["10003"] += [
+            {"fieldId": "priority", "key": "priority", "name": "Priority"},
+            {"fieldId": "customfield_10016", "key": "customfield_10016", "name": "Points"}]
+        base = {"project": {"key": "SCRUM"}, "issuetype": {"id": "10003"}, "summary": "New"}
+        adf = {"type": "doc", "version": 1, "content": []}
+        self.assertEqual(self.raw("POST", "/issue", base), 400)
+        for extra in ({"description": "plain text, not ADF"}, {"description": {"text": "x"}},
+                      {"parent": "SCRUM-1"}, {"parent": {"key": "SCRUM-999"}},
+                      {"priority": "High"}, {"customfield_10016": "3"},
+                      {"labels": ["not on the create screen"]},
+                      {"project": "SCRUM"}, {"issuetype": "10003"}):
+            fields = dict(base, **extra)
+            self.assertEqual(self.raw("POST", "/issue", {"fields": fields}), 400, extra)
+        self.assertEqual(len(self.fake.issues), 3)
+        made = self.client.create_issue(dict(base, description=adf, parent={"key": "SCRUM-1"},
+                                             priority={"name": "High"},
+                                             customfield_10016=3))
+        fields = self.fake.issues[made["key"]]["fields"]
+        # Read back the way Jira answers: the parent as an object with id and key.
+        self.assertEqual(fields["parent"], {"id": self.fake.issues["SCRUM-1"]["id"],
+                                            "key": "SCRUM-1"})
+        self.assertEqual(fields["description"], adf)
+
+    def test_edit_with_a_wrong_description_parent_or_priority_shape_is_rejected(self):
+        for fields in ({"description": "plain"}, {"parent": "SCRUM-1"},
+                       {"parent": {"key": "SCRUM-999"}}, {"priority": "High"}):
+            self.assertEqual(self.raw("PUT", "/issue/SCRUM-3", {"fields": fields}), 400, fields)
+        self.assertNotIn("parent", self.fake.issues["SCRUM-3"]["fields"])
+        self.client.update_issue("SCRUM-3", {"parent": {"key": "SCRUM-1"}})
+        self.assertEqual(self.fake.issues["SCRUM-3"]["fields"]["parent"]["key"], "SCRUM-1")
+
+    def test_link_with_a_wrong_shape_is_rejected(self):
+        good = {"type": {"name": "Blocks"}, "inwardIssue": {"key": "SCRUM-2"},
+                "outwardIssue": {"key": "SCRUM-3"}}
+        for body in (dict(good, type="Blocks"), dict(good, inwardIssue="SCRUM-2"),
+                     {k: v for k, v in good.items() if k != "outwardIssue"},
+                     dict(good, outwardIssue={"id": "SCRUM-3"})):
+            self.assertEqual(self.raw("POST", "/issueLink", body), 400, body)
+        self.assertEqual(self.fake.issues["SCRUM-2"]["fields"]["issuelinks"], [])
+
     def test_stuck_issue_answers_success_to_a_transition_but_keeps_its_status(self):
         self.fake.stuck.add("SCRUM-1")
         self.client.do_transition("SCRUM-1", "11", {})
