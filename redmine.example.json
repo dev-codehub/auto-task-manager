@@ -1,0 +1,6 @@
+{
+  "url": "PREENCHE: endereço do teu Redmine, ex. https://redmine.aempresa.pt (sem barra final)",
+  "project": "PREENCHE: identificador do projeto, está no URL .../projects/<identificador>/...",
+  "text_format": "PREENCHE: markdown ou textile, conforme o teu Redmine",
+  "issue_key": "subject_prefix"
+}

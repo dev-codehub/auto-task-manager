@@ -11,9 +11,10 @@ anything written.
 
 ## Before you start
 
-- The CLI is `redmine-backlog`: this plugin's `bin/` is on the Bash tool's
-  PATH while the plugin is enabled. If the command is not found, the
-  plugin is not enabled - say so and stop.
+- The CLI is `redmine-backlog`: it must be on PATH (in Claude Code, this
+  plugin's `bin/` is added automatically while it is enabled; elsewhere,
+  this repository's `bin/` must be on PATH). If the command is not found,
+  say so and stop - see the plugin README for setup.
 - `.redmine.json` must exist in the repository (root or a parent
   directory), same file `redmine-sync` uses. If it does not, stop and tell
   the person it needs `url` and `project`; see the plugin README.
