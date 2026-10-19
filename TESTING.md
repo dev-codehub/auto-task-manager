@@ -28,6 +28,13 @@ Este guia é para quem recebeu o `.zip` diretamente, sem passar pelo
   `.../projects/<identificador>/...`), `text_format` é `markdown` ou
   `textile` conforme o teu Redmine (pergunta a quem administra a
   instância se não souberes).
+  - O bloco `required_fields_on_close` no fim do template é só um exemplo
+    com um campo fictício (`reviewed`). **Se o teu Redmine não obriga a
+    preencher nenhum campo personalizado ao fechar uma issue, apaga esse
+    bloco** (e a vírgula no fim da linha `issue_key` mesmo acima, senão o
+    JSON fica inválido) - com ele lá, o CLI passa a exigir um campo que o
+    teu Redmine não tem. Se o teu Redmine obriga, substitui-o pelo campo
+    real (`id`, `key`, `name` e `values` - ver o README).
   - Trabalha sempre **a partir de dentro desta pasta** (`cd
     ~/auto-task-manager` antes de abrires o Claude Code ou o Codex) — é
     isso que lhes diz a que Redmine e a que projeto se referem os

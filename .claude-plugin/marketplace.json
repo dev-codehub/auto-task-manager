@@ -9,7 +9,7 @@
       "name": "auto-task-manager",
       "source": "./",
       "description": "Redmine task management from Claude Code: session-close updates (comment, % Done, status) and backlog management (create features/stories/tasks, relate issues, fix parents, update descriptions) - both dry-run first, written only after explicit approval.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

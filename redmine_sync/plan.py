@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .client import Client, NotFoundError
 from .config import Config
@@ -28,6 +28,28 @@ def has_marker(journals: Optional[List[dict]], session: str, user_id: int) -> bo
             if line.strip() == target:
                 return True
     return False
+
+
+def resolve_custom_fields(supplied: Dict[str, str],
+                          config: Config) -> Tuple[List[Tuple[int, str, str]], List[str]]:
+    """Cross-checks an update's 'custom_fields' against what .redmine.json declares -
+    updatefile.py cannot do this itself, it has no config. Returns (resolved,
+    errors); resolved is (field id, field name, value), ready for the API."""
+    by_key = {f.key: f for f in config.required_fields_on_close}
+    resolved: List[Tuple[int, str, str]] = []
+    errors: List[str] = []
+    for key, value in supplied.items():
+        required_field = by_key.get(key)
+        if required_field is None:
+            errors.append(f"unknown custom field '{key}'; this project declares: "
+                          f"{', '.join(sorted(by_key)) or 'none'}")
+            continue
+        if value not in required_field.values:
+            errors.append(f"'{key}' value '{value}' is not one of: "
+                          f"{', '.join(required_field.values)}")
+            continue
+        resolved.append((required_field.id, required_field.name, value))
+    return resolved, errors
 
 
 def subject_key(subject: str) -> str:
@@ -93,6 +115,9 @@ class Row:
     already_applied: bool = False
     transition_checked: bool = False
     warnings: List[str] = field(default_factory=list)
+    # (field id, field name, value) - the id is what the API PUT needs, the name
+    # is only for the dry-run display.
+    custom_fields: List[Tuple[int, str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -166,6 +191,10 @@ def build_plan(client: Client, config: Config, update_file: UpdateFile,
         if row.already_applied:
             continue
 
+        resolved_fields, field_errors = resolve_custom_fields(update.custom_fields, config)
+        errors += [f"{where}: {e}" for e in field_errors]
+        row.custom_fields = resolved_fields
+
         if update.status is not None:
             status = by_name.get(update.status.casefold())
             if status is None:
@@ -183,6 +212,13 @@ def build_plan(client: Client, config: Config, update_file: UpdateFile,
             final_done = update.done_ratio if update.done_ratio is not None else row.current_done
             if status.get("is_closed") and final_done is not None and final_done < 100:
                 row.warnings.append(f"closing with % Done below 100 ({final_done}%)")
+            if status.get("is_closed") and final_done == 100:
+                missing = [f"{f.name} ({', '.join(f.values)})"
+                           for f in config.required_fields_on_close
+                           if f.key not in update.custom_fields]
+                if missing:
+                    errors.append(f"{where}: closing at 100% done requires 'custom_fields' to "
+                                  f"set: {'; '.join(missing)}")
 
         if update.done_ratio is not None:
             row.target_done = update.done_ratio

@@ -70,6 +70,55 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 load_config(path)
 
+    def test_required_fields_on_close_defaults_to_empty(self):
+        path = self.write(".redmine.json", json.dumps(
+            {"url": "https://redmine.example.org", "project": "demo"}))
+        self.assertEqual(load_config(path).required_fields_on_close, ())
+
+    def test_required_fields_on_close_parses(self):
+        path = self.write(".redmine.json", json.dumps({
+            "url": "https://redmine.example.org", "project": "demo",
+            "required_fields_on_close": [
+                {"id": 1, "key": "reviewed", "name": "Reviewed", "values": ["Yes", "No"]},
+            ],
+        }))
+        fields = load_config(path).required_fields_on_close
+        self.assertEqual(len(fields), 1)
+        self.assertEqual(fields[0].id, 1)
+        self.assertEqual(fields[0].key, "reviewed")
+        self.assertEqual(fields[0].name, "Reviewed")
+        self.assertEqual(fields[0].values, ("Yes", "No"))
+
+    def test_required_fields_on_close_rejects_duplicate_key(self):
+        path = self.write(".redmine.json", json.dumps({
+            "url": "https://redmine.example.org", "project": "demo",
+            "required_fields_on_close": [
+                {"id": 1, "key": "reviewed", "name": "Reviewed", "values": ["Yes"]},
+                {"id": 2, "key": "reviewed", "name": "Reviewed Again", "values": ["Yes"]},
+            ],
+        }))
+        with self.assertRaises(ConfigError) as cm:
+            load_config(path)
+        self.assertIn("duplicate key", str(cm.exception))
+
+    def test_required_fields_on_close_rejects_bad_shape(self):
+        for bad in (
+            [{"key": "reviewed", "name": "Reviewed", "values": ["Yes"]}],  # missing id
+            [{"id": 1, "name": "Reviewed", "values": ["Yes"]}],  # missing key
+            [{"id": 1, "key": "reviewed", "values": ["Yes"]}],  # missing name
+            [{"id": 1, "key": "reviewed", "name": "Reviewed", "values": []}],  # empty values
+            [{"id": "1", "key": "reviewed", "name": "Reviewed", "values": ["Yes"]}],  # id not int
+            "not a list",
+        ):
+            path = self.write(".redmine.json", json.dumps({
+                "url": "https://redmine.example.org", "project": "demo",
+                "required_fields_on_close": bad,
+            }))
+            with self.assertRaises(ConfigError) as cm:
+                load_config(path)
+            self.assertIn("required_fields_on_close", str(cm.exception))
+            self.assertNotIn("unknown key", str(cm.exception))
+
     def test_load_config_rejects_invalid_json(self):
         path = self.write(".redmine.json", "{not json")
         with self.assertRaises(ConfigError) as cm:

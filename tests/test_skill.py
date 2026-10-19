@@ -31,6 +31,14 @@ class SkillTests(unittest.TestCase):
         self.assertIn("'#", step(2))
         self.assertIn("comment", step(2))
 
+    def test_custom_fields_are_asked_for_never_guessed(self):
+        fields = step(3)
+        self.assertIn("custom_fields", fields)
+        self.assertIn("required_fields_on_close", fields)
+        self.assertIn("Ask the person", fields)
+        self.assertIn("rather than guessing", fields)
+        self.assertIn("accepts", fields)
+
     def test_approval_step_forbids_writing_without_a_yes(self):
         self.assertIn("Never run `--write` without this yes", step(5))
 
