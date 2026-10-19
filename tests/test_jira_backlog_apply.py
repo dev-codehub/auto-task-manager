@@ -7,7 +7,7 @@ from jira_sync.adf import markdown_to_adf
 from jira_sync.backlog_apply import apply_backlog_plan, fix_parents, update_descriptions
 from jira_sync.backlog_file import parse_backlog_file
 from jira_sync.backlog_plan import build_backlog_plan
-from jira_sync.client import Client
+from jira_sync.client import Client, TransportError
 from jira_sync.render import (format_backlog_plan, format_backlog_report,
                               format_description_report, format_parent_report)
 from tests.fake_jira import demo_fake
@@ -151,6 +151,31 @@ class BacklogApplyTests(Base):
         self.assertEqual(len(self.fake.writes), writes)
         self.assertEqual(len(self.fake.issues["SCRUM-5"]["fields"]["issuelinks"]), 1)
 
+    def test_a_create_whose_answer_is_lost_says_the_issue_may_exist(self):
+        d = doc([node("EP-01", "Epic"), node("ST-01", "Story", "EP-01")])
+        create = self.client.create_issue
+
+        def created_then_timed_out(fields):
+            if fields["summary"].startswith("ST-01"):
+                create(fields)
+                raise TransportError(f"cannot reach {self.fake.url} (timed out)")
+            return create(fields)
+
+        self.client.create_issue = created_then_timed_out
+        report = self.apply(d)
+        self.assertIn("ST-01", report.error)
+        self.assertIn("timed out", report.error)
+        self.assertIn("the issue may have been created; check for ST-01 in Jira before "
+                      "re-running", report.error)
+        text = format_backlog_report(report)
+        self.assertIn("run the dry run again first", text)
+
+    def test_a_create_jira_refused_does_not_say_the_issue_may_exist(self):
+        self.fake.create_fields["10001"] = []  # nothing settable: the description is refused
+        report = self.apply(doc([node("EP-01", "Epic")]))
+        self.assertIn("EP-01", report.error)
+        self.assertNotIn("may have been created", report.error)
+
     def test_parent_that_did_not_land_warns_to_run_fix_parents(self):
         self.fake.ignored_fields = {"parent"}
         report = self.apply(doc([node("EP-01", "Epic"), node("ST-01", "Story", "EP-01")]))
@@ -201,6 +226,8 @@ class BacklogApplyTests(Base):
         self.assertIsNotNone(report.error)
         self.assertIn("EX-01 blocks EX-02", report.error)
         self.assertIn("does not show", report.error)
+        self.assertIn("may now exist in the opposite direction", report.error)
+        self.assertIn("delete it in Jira before re-running", report.error)
         self.assertEqual(report.relations, [])
         links = [w for w in self.fake.writes if w[1] == "/rest/api/3/issueLink"]
         self.assertEqual(len(links), 1)
@@ -310,6 +337,19 @@ class FixParentsTests(Base):
         # Once right, a second report finds nothing wrong for EX-02.
         again = fix_parents(self.client, self.file(self.d), write=False)
         self.assertEqual([f.node_id for f in again.wrong], ["EX-03"])
+
+    def test_project_key_is_quoted_in_the_jql(self):
+        search, queries = self.client.search, []
+
+        def recording(jql, fields):
+            queries.append(jql)
+            return search(jql, fields)
+
+        self.client.search = recording
+        fix_parents(self.client, self.file(self.d), write=False)
+        update_descriptions(self.client, self.file(self.d), only=[], write=False)
+        build_backlog_plan(self.client, self.file(self.d))
+        self.assertEqual(queries, ['project = "SCRUM"'] * 3)
 
     def test_ambiguous_match_is_reported_not_resolved(self):
         self.fake.add_issue("EX-02: An import", type_name="Story")

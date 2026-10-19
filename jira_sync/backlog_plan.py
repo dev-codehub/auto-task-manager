@@ -163,7 +163,7 @@ def build_backlog_plan(client: Client, file: BacklogFile,
     # A reference that isn't '#KEY' is always another node's own id
     # (backlog_file.py guarantees it), so only this file's node ids are ever
     # resolved against the project - and more than one match is an error.
-    project_issues = client.search(f"project = {project_key}", _ISSUE_FIELDS)
+    project_issues = client.search(f'project = "{project_key}"', _ISSUE_FIELDS)
     issue_by_key = {i["key"]: i for i in project_issues}
     key_index = index_by_key(project_issues)
     existing: Dict[str, str] = {}

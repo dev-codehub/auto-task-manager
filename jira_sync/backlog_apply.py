@@ -7,7 +7,7 @@ from .adf import markdown_to_adf
 from .apply import _reads_back_as, display
 from .backlog_file import BacklogFile, Node
 from .backlog_plan import BacklogPlan, PlannedNode, _link_exists, index_by_key, resolve_key
-from .client import Client, JiraError
+from .client import Client, JiraError, TransportError
 
 # A description is only checked as present and non-empty: Jira stores its own
 # normal form of the document, so comparing content would fail a correct write.
@@ -75,6 +75,12 @@ def apply_backlog_plan(client: Client, plan: BacklogPlan, write: bool) -> Backlo
         fields = _create_fields(plan, pn, keys)
         try:
             made = client.create_issue(fields)
+        except TransportError as e:
+            # A timeout or a 5xx can come after Jira made the issue, and the
+            # search a re-run uses to find it may not show it straight away.
+            report.error = (f"{pn.node.id}: {e} - the issue may have been created; check for "
+                            f"{pn.node.id} in Jira before re-running")
+            return report
         except JiraError as e:
             report.error = f"{pn.node.id}: {e}"
             return report
@@ -122,8 +128,10 @@ def apply_backlog_plan(client: Client, plan: BacklogPlan, write: bool) -> Backlo
         # "created" and post the link again on every re-run.
         if not _link_exists(links, pr.site_link_type, to_key):
             report.error = (f"relation {label}: Jira accepted the link but {from_key} does not "
-                            f"show a '{pr.link_type}' link to {to_key} in that direction - "
-                            f"check the link in Jira before re-running")
+                            f"show a '{pr.link_type}' link to {to_key} in that direction - the "
+                            f"link may now exist in the opposite direction ({to_key} "
+                            f"{pr.relation.type} {from_key}); if so, delete it in Jira before "
+                            f"re-running")
             return report
         report.relations.append(RelationOutcome(label, "created"))
 
@@ -216,7 +224,7 @@ class ParentReport:
 
 def _project_issues(client: Client, file: BacklogFile, fields: Tuple[str, ...]) -> List[dict]:
     project_key = client.get_project(file.project)["key"]
-    return client.search(f"project = {project_key}", fields)
+    return client.search(f'project = "{project_key}"', fields)
 
 
 def fix_parents(client: Client, file: BacklogFile, write: bool) -> ParentReport:

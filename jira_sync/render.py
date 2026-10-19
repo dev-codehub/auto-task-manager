@@ -61,8 +61,8 @@ def format_report(report: Report) -> str:
     out.append("")
     if report.error:
         out.append(f"stopped at {report.error}")
-        out.append(f"{written} issue(s) written before the stop; "
-                   f"re-run the same command to resume")
+        out.append(f"{written} issue(s) written before the stop. To resume, run the dry run "
+                   f"again first (without --write) and check it, then re-run with --write")
     else:
         out.append(f"done: {written} written, {skipped} skipped")
     return "\n".join(out)
@@ -110,8 +110,9 @@ def format_backlog_report(report) -> str:
     lines.append("")
     if report.error:
         lines.append(f"stopped at {report.error}")
-        lines.append(f"{created} issue(s) created before the stop; re-run the same command to "
-                     f"resume - what already exists is skipped")
+        lines.append(f"{created} issue(s) created before the stop. To resume, run the dry run "
+                     f"again first (without --write) and check it, then re-run with --write - "
+                     f"what already exists is skipped")
     else:
         links = sum(1 for r in report.relations if r.result == "created")
         lines.append(f"done: {created} created, {skipped} skipped; {links} link(s) created, "

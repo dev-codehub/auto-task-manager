@@ -144,6 +144,8 @@ class JiraApplyTests(unittest.TestCase):
         self.assertIn("stopped at SCRUM-2", text)
         self.assertIn("1 issue(s) written before the stop", text)
         self.assertIn("re-run", text)
+        self.assertIn("run the dry run again first", text)
+        self.assertNotIn("re-run the same command", text)
 
         self.fake.forbidden.clear()
         second = self.run_apply(*rows)
