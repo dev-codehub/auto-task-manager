@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import base64
+import json
 import unittest
+import urllib.error
+import urllib.request
 
 from jira_sync.client import (AuthError, Client, ForbiddenError, NotFoundError,
                               RejectedError, TransportError)
@@ -131,8 +134,24 @@ class JiraClientTests(unittest.TestCase):
         adf = {"type": "doc", "version": 1, "content": []}
         added = self.client.add_comment("SCRUM-1", adf)
         self.assertEqual(added["author"]["accountId"], "acc-1")
+        self.assertEqual(added["body"], adf)
+        self.assertEqual(self.fake.issues["SCRUM-1"]["comments"][0]["body"], adf)
         comments = self.client.list_comments("SCRUM-1")
         self.assertEqual([c["id"] for c in comments], [added["id"]])
+
+    def test_add_comment_without_the_body_wrapper_is_rejected_by_the_fake(self):
+        bare = {"type": "doc", "version": 1, "content": []}
+        req = urllib.request.Request(
+            self.fake.url + "/rest/api/3/issue/SCRUM-1/comment",
+            data=json.dumps(bare).encode("utf-8"), method="POST")
+        req.add_header("Authorization", "Basic " + base64.b64encode(
+            b"tester@example.com:test-token").decode("ascii"))
+        req.add_header("Content-Type", "application/json")
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            urllib.request.urlopen(req)
+        self.assertEqual(cm.exception.code, 400)
+        cm.exception.close()
+        self.assertEqual(self.fake.issues["SCRUM-1"]["comments"], [])
 
     def test_comments_are_paged_to_the_end(self):
         self.fake.issues["SCRUM-1"]["comments"] = [
@@ -158,6 +177,7 @@ class JiraClientTests(unittest.TestCase):
         self.assertEqual(self.client.link_types()[0]["name"], "Blocks")
         self.client.create_link("Blocks", "SCRUM-2", "SCRUM-3")
         links = self.client.get_issue("SCRUM-2")["fields"]["issuelinks"]
+        # Inward/outward orientation is unconfirmed until Task 10 checks it on a real site.
         self.assertEqual(links[0]["inwardIssue"]["key"], "SCRUM-3")
 
     def test_link_with_unknown_type_is_not_found(self):

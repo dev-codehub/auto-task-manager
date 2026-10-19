@@ -407,9 +407,15 @@ def _handler_for(fake: FakeJira):
                                                               "do not have permission to see it."],
                                             "errors": {}})
                 if match.group(2) == "comment":
+                    doc = body.get("body")
+                    if not isinstance(doc, dict) or doc.get("type") != "doc":
+                        return self._send(400, {
+                            "errorMessages": ["Comment body is not valid! The request must be "
+                                              '{"body": <ADF document>}.'],
+                            "errors": {}})
                     comment = {"id": str(fake._next_comment_id),
                                "author": {"accountId": fake.account_id},
-                               "body": body, "created": "2026-10-19T10:00:00.000+0000"}
+                               "body": doc, "created": "2026-10-19T10:00:00.000+0000"}
                     fake._next_comment_id += 1
                     issue["comments"].append(comment)
                     return self._send(201, comment)

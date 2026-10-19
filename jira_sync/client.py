@@ -96,7 +96,8 @@ class Client:
         return self._paged(f"{API}/issue/{_quote(key)}/comment", "comments")
 
     def add_comment(self, key: str, adf: dict) -> dict:
-        return self._request("POST", f"{API}/issue/{_quote(key)}/comment", adf)
+        return self._request("POST", f"{API}/issue/{_quote(key)}/comment",
+                             {"body": adf})
 
     def transitions(self, key: str) -> List[dict]:
         query = urllib.parse.urlencode({"expand": "transitions.fields"})
