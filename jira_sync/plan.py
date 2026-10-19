@@ -180,10 +180,16 @@ def resolve_transition_fields(transition: dict,
 
 
 def _story_points_field(client: Client, config: Config) -> Tuple[Optional[str], Optional[str]]:
-    """(field id, None) or (None, problem). The problem only matters when some
-    row sets story points."""
-    if config.story_points_field:
-        return config.story_points_field, None
+    return find_story_points_field(client, config.story_points_field)
+
+
+def find_story_points_field(client: Client,
+                            configured: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """(field id, None) or (None, problem): the configured id, else the one
+    field named exactly like a story points field. The problem only matters
+    when something sets story points."""
+    if configured:
+        return configured, None
     matches = [f for f in client.list_fields() if f.get("name") in STORY_POINTS_NAMES]
     if len(matches) == 1:
         return matches[0]["id"], None
