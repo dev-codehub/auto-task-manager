@@ -141,7 +141,7 @@ class BacklogPlanTests(unittest.TestCase):
         sub_key = self.fake.add_issue("An existing sub-task", type_name="Sub-task")
         new_parent = doc(nodes=[
             {"id": "SB-01", "subject": "SB-01 A sub-task", "description": "d",
-             "type": "Sub-task", "parent": None},
+             "type": "Sub-task", "parent": "#SCRUM-2"},
             {"id": "ST-01", "subject": "ST-01 A story", "description": "d",
              "type": "Story", "parent": "SB-01"}])
         key_parent = doc(nodes=[
@@ -151,6 +151,7 @@ class BacklogPlanTests(unittest.TestCase):
             with self.subTest(label):
                 plan = self.plan(d)
                 self.assertFalse(plan.ok)
+                self.assertEqual(len(plan.errors), 1, plan.errors)
                 msg = " ".join(plan.errors)
                 self.assertIn("ST-01", msg)
                 self.assertIn("Sub-task", msg)
@@ -178,7 +179,55 @@ class BacklogPlanTests(unittest.TestCase):
                 plan = self.plan(d)
                 self.assertTrue(plan.ok, plan.errors)
 
+    def test_sub_task_without_a_parent_is_an_error_naming_the_node(self):
+        d = doc(nodes=[
+            {"id": "SB-01", "subject": "SB-01 A sub-task", "description": "d",
+             "type": "Sub-task", "parent": None}])
+        plan = self.plan(d)
+        self.assertFalse(plan.ok)
+        self.assertEqual(len(plan.errors), 1, plan.errors)
+        self.assertIn("SB-01", plan.errors[0])
+        self.assertIn("sub-task", plan.errors[0].lower())
+        self.assertIn("parent", plan.errors[0])
+        # Known by the subtask flag alone, too.
+        self.fake.issue_types[3].pop("hierarchyLevel")
+        plan = self.plan(d)
+        self.assertFalse(plan.ok)
+        self.assertIn("SB-01", " ".join(plan.errors))
+
+    def test_sub_task_under_an_epic_is_a_hierarchy_error(self):
+        new_parent = doc(nodes=[
+            {"id": "EP-01", "subject": "EP-01 An epic", "description": "d",
+             "type": "Epic", "parent": None},
+            {"id": "SB-01", "subject": "SB-01 A sub-task", "description": "d",
+             "type": "Sub-task", "parent": "EP-01"}])
+        key_parent = doc(nodes=[
+            {"id": "SB-01", "subject": "SB-01 A sub-task", "description": "d",
+             "type": "Sub-task", "parent": "#SCRUM-1"}])  # SCRUM-1 is an Epic
+        for label, d in (("new node parent", new_parent), ("#KEY parent", key_parent)):
+            with self.subTest(label):
+                plan = self.plan(d)
+                self.assertFalse(plan.ok)
+                self.assertEqual(len(plan.errors), 1, plan.errors)
+                self.assertIn("SB-01", plan.errors[0])
+                self.assertIn("hierarchy", plan.errors[0].lower())
+
+    def test_story_under_a_sub_task_is_an_error_by_the_subtask_flag_without_levels(self):
+        for t in self.fake.issue_types:
+            t.pop("hierarchyLevel")
+        sub_key = self.fake.add_issue("An existing sub-task", type_name="Sub-task")
+        d = doc(nodes=[
+            {"id": "ST-01", "subject": "ST-01 A story", "description": "d",
+             "type": "Story", "parent": f"#{sub_key}"}])
+        plan = self.plan(d)
+        self.assertFalse(plan.ok)
+        self.assertIn("hierarchy", " ".join(plan.errors).lower())
+        # Without levels, a story under an epic cannot be told apart from a
+        # story under a story: allowed, the subtask flags say nothing against it.
+        self.assertTrue(self.plan(doc()).ok)
+
     def test_story_under_an_existing_node_is_checked_against_its_type(self):
+        # Already in Jira, so not created: its own missing parent is not checked.
         self.fake.add_issue("SB-09 Already there", type_name="Sub-task")
         d = doc(nodes=[
             {"id": "SB-09", "subject": "SB-09 Already there", "description": "d",

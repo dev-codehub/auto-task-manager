@@ -94,12 +94,35 @@ def _order_new_nodes(nodes: List[Node], existing_ids: set) -> Tuple[List[Node], 
 
 
 def _level(issue_type: Optional[dict], types_by_id: Dict[str, dict]) -> Optional[int]:
+    """The type's hierarchy level; a sub-task type known only by its
+    `subtask` flag is -1. None when neither tells."""
     if not issue_type:
         return None
-    level = issue_type.get("hierarchyLevel")
-    if level is None:
-        level = types_by_id.get(str(issue_type.get("id")), {}).get("hierarchyLevel")
-    return level if isinstance(level, int) and not isinstance(level, bool) else None
+    site = types_by_id.get(str(issue_type.get("id")), {})
+    for source in (issue_type, site):
+        level = source.get("hierarchyLevel")
+        if isinstance(level, int) and not isinstance(level, bool):
+            return level
+    return -1 if _is_subtask(issue_type, types_by_id) else None
+
+
+def _is_subtask(issue_type: Optional[dict], types_by_id: Dict[str, dict]) -> bool:
+    if not issue_type:
+        return False
+    site = types_by_id.get(str(issue_type.get("id")), {})
+    return any(source.get("subtask") is True or source.get("hierarchyLevel") == -1
+               for source in (issue_type, site))
+
+
+def _hierarchy_problem(child_level: Optional[int], parent_level: Optional[int]) -> bool:
+    """Jira puts a child exactly one level below its parent (Epic 1 > Story/Task 0
+    > Sub-task -1). With one level unknown, only what the known side rules out
+    is a problem: nothing goes under a sub-task. Stricter than Jira might be on
+    purpose - a plan blocked by mistake is safer than one mis-written; Task 10
+    confirms the rule on a real site."""
+    if child_level is not None and parent_level is not None:
+        return parent_level != child_level + 1
+    return parent_level == -1
 
 
 def _link_exists(links: List[dict], link_type: dict, other_key: str) -> bool:
@@ -229,7 +252,11 @@ def build_backlog_plan(client: Client, file: BacklogFile,
                               f"story points field {field_label(points_field)}; leave "
                               f"'story_points' out")
 
-        if node.parent is not None:
+        if node.parent is None:
+            if _is_subtask(issue_type, types_by_id):
+                errors.append(f"node ({nid}): a '{node.type}' is a sub-task type and needs a "
+                              f"'parent' - Jira does not create a sub-task without one")
+        else:
             parent = issue_of(node.parent)
             if parent is not None:
                 parent_type = (parent.get("fields") or {}).get("issuetype")
@@ -237,13 +264,11 @@ def build_backlog_plan(client: Client, file: BacklogFile,
                 parent_type = types_by_name.get(by_id[node.parent].type)
             else:
                 parent_type = None  # a '#KEY' that failed to resolve, already reported
-            child_level, parent_level = _level(issue_type, types_by_id), _level(parent_type,
-                                                                               types_by_id)
-            if child_level is not None and parent_level is not None \
-                    and child_level >= parent_level:
+            if parent_type and _hierarchy_problem(_level(issue_type, types_by_id),
+                                                  _level(parent_type, types_by_id)):
                 errors.append(f"node ({nid}): a '{node.type}' cannot be a child of "
                               f"'{node.parent}', a '{parent_type.get('name')}' - Jira's "
-                              f"hierarchy puts a child below its parent")
+                              f"hierarchy puts a child exactly one level below its parent")
 
     relations: List[PlannedRelation] = []
     if file.relations:
