@@ -1,6 +1,11 @@
 # Jira Cloud support for auto-task-manager
 
-Status: draft for approval. Written 2026-10-19.
+Status: approved by the requester on 2026-10-19. Written 2026-10-19.
+
+A Jira Cloud test site exists for end-to-end verification
+(`https://lj-test-jira.atlassian.net`, project `SCRUM`, story points field
+`customfield_10016`). The requester owns it and the credentials; the builder
+never reads them. Live checks run only when the requester says so.
 
 ## Intent
 
@@ -107,6 +112,14 @@ already satisfied and the ones that are **missing**, and the comment. A missing
 required field is an error that blocks the whole write, naming the field and,
 for fields with a fixed list of options, the options Jira accepts. The skill
 asks the person for those values and never guesses them.
+
+Field types for `transition_fields` (approved): the first version supports
+text, number and single-option fields (for example `Resolution`). Options are
+validated against the values Jira lists for that field. Any other type (user,
+multi-select, cascading select, version, rich text) is not supported: the row is
+blocked in the dry-run with "field not supported, set it in Jira", naming the
+field. A required field of an unsupported type therefore blocks that transition
+until the person sets it in Jira themselves.
 
 `apply --write` posts the comment, performs the transition with its fields, sets
 story points, then reads the issue back and verifies each change.
