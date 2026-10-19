@@ -12,6 +12,8 @@ It reproduces, on purpose, the ways a real site disagrees with a naive client:
 * ``forbidden``: issue keys where every write (edit, comment, transition)
   answers 403.
 * ``answer_html`` (a login page where JSON should be) and ``redirect_to``.
+* ``omit_keys``: top-level keys left out of every JSON object answered (a
+  paged answer without its items key, for example).
 
 It answers 400 to payload shapes real Jira rejects: a comment that is not
 ``{"body": <ADF doc>}``, a transition without ``{"transition": {"id": ...}}``
@@ -59,6 +61,7 @@ class FakeJira:
         self.stuck: Set[str] = set()
         self.answer_html = False
         self.redirect_to: Optional[str] = None
+        self.omit_keys: Set[str] = set()
         self.hits = 0
         self.requests: List[str] = []
         self.writes: List[Tuple[str, str, dict]] = []
@@ -347,6 +350,8 @@ def _handler_for(fake: FakeJira):
             pass
 
         def _send(self, code: int, body: Optional[dict] = None) -> None:
+            if isinstance(body, dict) and fake.omit_keys:
+                body = {k: v for k, v in body.items() if k not in fake.omit_keys}
             data = b"" if body is None else json.dumps(body).encode("utf-8")
             self.send_response(code)
             if body is not None:

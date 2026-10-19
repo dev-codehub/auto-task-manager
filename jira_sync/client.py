@@ -130,12 +130,17 @@ class Client:
         return self.get_issue(key)
 
     def _paged(self, path: str, items_key: str) -> List[dict]:
-        """Follow startAt/maxResults pages (createmeta, comments) until total."""
+        """Follow startAt/maxResults pages (createmeta, comments) until total.
+        A page without its items key is an error, never an empty list: the
+        comments are what a re-run checks for its marker."""
         out: List[dict] = []
         while True:
             query = urllib.parse.urlencode({"startAt": len(out), "maxResults": PAGE})
             page = self._request("GET", f"{path}?{query}")
-            got = page.get(items_key, [])
+            if not isinstance(page, dict) or not isinstance(page.get(items_key), list):
+                raise TransportError(f"unexpected answer from {self._base} to GET {path}: "
+                                     f"no '{items_key}' list in it")
+            got = page[items_key]
             out += got
             if not got or len(out) >= page.get("total", 0):
                 return out

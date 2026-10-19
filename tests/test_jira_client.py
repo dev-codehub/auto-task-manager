@@ -41,6 +41,26 @@ class JiraClientTests(unittest.TestCase):
         searches = [r for r in self.fake.requests if r == "POST /rest/api/3/search/jql"]
         self.assertEqual(len(searches), 3)
 
+    def test_fake_search_filters_by_a_quoted_project_key(self):
+        self.fake.add_project("OTHER", "10001")
+        other = self.fake.add_issue("Elsewhere", project="OTHER")
+        found = self.client.search('project = "OTHER"', ["summary"])
+        self.assertEqual([i["key"] for i in found], [other])
+        self.assertEqual(len(self.client.search('project = "SCRUM"', ["summary"])), 3)
+
+    def test_a_paged_answer_without_its_items_key_is_an_error_not_an_empty_list(self):
+        self.client.add_comment("SCRUM-1", {"type": "doc", "version": 1, "content": []})
+        self.fake.omit_keys = {"comments"}
+        with self.assertRaises(TransportError) as cm:
+            self.client.list_comments("SCRUM-1")
+        message = str(cm.exception)
+        self.assertIn("unexpected answer", message)
+        self.assertIn("/rest/api/3/issue/SCRUM-1/comment", message)
+        self.assertIn("'comments'", message)
+        # An empty page that has the key is still an empty list.
+        self.fake.omit_keys = set()
+        self.assertEqual(self.client.list_comments("SCRUM-2"), [])
+
     def test_search_is_a_read_and_is_not_recorded_as_a_write(self):
         self.client.search("project = SCRUM", ["summary"])
         self.assertEqual(self.fake.writes, [])
