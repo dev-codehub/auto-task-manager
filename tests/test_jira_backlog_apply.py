@@ -353,6 +353,43 @@ class UpdateDescriptionsTests(Base):
         self.assertIn("EX-01", report.error)
         self.assertIn("description", report.error)
 
+    def test_clearing_a_description_is_confirmed_by_the_read_back(self):
+        self.fake.issues[self.key]["fields"]["description"] = markdown_to_adf("Old text")
+        d = doc([node("EX-01", "Epic", description="")])
+        report = update_descriptions(self.client, self.file(d), only=["EX-01"], write=True)
+        self.assertIsNone(report.error)
+        self.assertEqual([(o.node_id, o.result) for o in report.outcomes],
+                         [("EX-01", "updated")])
+        self.assertIn("cleared", " ".join(report.outcomes[0].notes))
+        self.assertIsNone(self.fake.issues[self.key]["fields"]["description"])
+
+    def test_clearing_a_description_that_still_reads_back_is_an_error(self):
+        self.fake.issues[self.key]["fields"]["description"] = markdown_to_adf("Old text")
+        self.fake.ignored_fields = {"description"}
+        d = doc([node("EX-01", "Epic", description="")])
+        report = update_descriptions(self.client, self.file(d), only=["EX-01"], write=True)
+        self.assertIsNotNone(report.error)
+        self.assertIn("EX-01", report.error)
+        self.assertIn("sent empty but the issue still has a description", report.error)
+        self.assertEqual(report.outcomes, [])
+
+    def test_write_for_an_only_id_with_no_issue_or_an_ambiguous_one_fails_and_writes_nothing(
+            self):
+        report = update_descriptions(self.client, self.file(self.d), only=["EX-01", "EX-02"],
+                                     write=True)
+        self.assertIsNotNone(report.error)
+        self.assertIn("EX-02", report.error)
+        self.assertNotIn("EX-01", report.error)
+        self.assertEqual(self.fake.writes, [])
+
+        self.fake.add_issue("EX-01: A copy", type_name="Epic")
+        report = update_descriptions(self.client, self.file(self.d), only=["EX-01"], write=True)
+        self.assertIsNotNone(report.error)
+        self.assertIn("EX-01", report.error)
+        self.assertIn("ambiguous", report.error)
+        self.assertEqual(self.fake.writes, [])
+        self.assertIn("error:", format_description_report(report))
+
     def test_unknown_only_id_is_an_error(self):
         report = update_descriptions(self.client, self.file(self.d), only=["NO-SUCH"],
                                      write=True)

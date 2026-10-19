@@ -157,6 +157,13 @@ class JiraBacklogCliTests(unittest.TestCase):
         self.assertIn("updated", out)
         self.assertIn("content not compared", out)
 
+    def test_update_descriptions_write_for_an_only_id_with_no_issue_exits_1(self):
+        code, out, err = self.run_cli("update-descriptions", self.write_plan(self.doc()),
+                                      "--only=EP-01", "--write")
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("EP-01", out)
+        self.assertEqual(self.fake.writes, [])
+
     def test_unfilled_credentials_exit_1_with_not_filled_in(self):
         code, _, err = self.run_cli("plan", self.write_plan(self.doc()), environ={
             "JIRA_EMAIL": "PREENCHE: your email", "JIRA_API_TOKEN": "PREENCHE: your token"})

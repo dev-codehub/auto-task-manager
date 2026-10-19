@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .adf import markdown_to_adf
 from .apply import _reads_back_as, display
-from .backlog_file import BacklogFile
+from .backlog_file import BacklogFile, Node
 from .backlog_plan import BacklogPlan, PlannedNode, _link_exists, index_by_key, resolve_key
 from .client import Client, JiraError
 
@@ -291,19 +291,31 @@ def update_descriptions(client: Client, file: BacklogFile, only: List[str],
         return report
     key_index = index_by_key(_project_issues(client, file, ("summary",)))
 
+    targets: List[Tuple[Node, str]] = []
+    problems: List[str] = []
     for node in file.nodes:
         if node.id not in wanted:
             continue
         key, ambiguity = resolve_key(key_index, node.id)
         if ambiguity:
             report.outcomes.append(DescriptionOutcome(node.id, None, "ambiguous"))
+            problems.append(ambiguity)
             continue
         if key is None:
             report.outcomes.append(DescriptionOutcome(node.id, None, "skipped-no-issue"))
+            problems.append(f"'{node.id}' has no issue in the project")
             continue
         if not write:
             report.outcomes.append(DescriptionOutcome(node.id, key, "would update"))
             continue
+        targets.append((node, key))
+    if write and problems:
+        # Every --only id was asked for by name: one that cannot be written
+        # fails the run, before anything is written.
+        report.error = f"--only: {'; '.join(problems)} - nothing was written"
+        return report
+
+    for node, key in targets:
         description = markdown_to_adf(node.description)
         empty = not description["content"]
         try:
@@ -311,11 +323,17 @@ def update_descriptions(client: Client, file: BacklogFile, only: List[str],
         except JiraError as e:
             report.error = f"{node.id} ({key}): {e}"
             return report
+        live = (reread.get("fields") or {}).get("description")
         if empty:
+            # Clearing with null is unconfirmed on a real site: trust the read-back.
+            if _has_content(live):
+                report.error = (f"{node.id} ({key}): the description was sent empty but the "
+                                f"issue still has a description - Jira did not clear it")
+                return report
             report.outcomes.append(DescriptionOutcome(
                 node.id, key, "updated", ["description empty in the plan file - cleared"]))
             continue
-        if not _has_content((reread.get("fields") or {}).get("description")):
+        if not _has_content(live):
             report.error = (f"{node.id} ({key}): the description was sent but reads back "
                             f"empty - Jira accepted the edit without storing it")
             return report
