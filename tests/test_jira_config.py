@@ -89,6 +89,14 @@ class JiraConfigTests(unittest.TestCase):
                 load_config(path)
             self.assertIn("story_points_field", str(cm.exception))
 
+    def test_unfilled_story_points_field_is_reported(self):
+        path = self.config(url="https://x.atlassian.net", project="WIT",
+                           story_points_field="PREENCHE: id do campo, ex. customfield_10016")
+        with self.assertRaises(ConfigError) as cm:
+            load_config(path)
+        self.assertIn("not filled in", str(cm.exception))
+        self.assertIn("story_points_field", str(cm.exception))
+
     def test_credentials_from_environment_win(self):
         creds = load_credentials(
             {"JIRA_EMAIL": " a@b.c ", "JIRA_API_TOKEN": " tok "},

@@ -70,6 +70,10 @@ def load_config(path: str) -> Config:
     if not isinstance(updates_dir, str) or not updates_dir.strip():
         raise ConfigError(f"{path}: 'updates_dir' must be a non-empty string")
     points = raw.get("story_points_field")
+    if isinstance(points, str) and points.startswith(_PLACEHOLDER):
+        raise ConfigError(
+            f"{path}: 'story_points_field' is not filled in - set it to the field id "
+            f"(for example customfield_10016) or delete the line")
     if points is not None and (not isinstance(points, str)
                                or not _CUSTOM_FIELD.fullmatch(points)):
         raise ConfigError(

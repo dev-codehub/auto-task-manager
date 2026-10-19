@@ -1,5 +1,6 @@
 {
   "url": "PREENCHE: endereço do teu Jira Cloud, ex. https://projeto-wit.atlassian.net (sem barra final)",
   "project": "PREENCHE: chave do projeto, é o prefixo das issues, ex. PROJ em PROJ-123",
-  "updates_dir": "jira/session-updates"
+  "updates_dir": "jira/session-updates",
+  "story_points_field": "PREENCHE: id do campo, ex. customfield_10016 (opcional; sem ele procura-se pelo nome)"
 }
