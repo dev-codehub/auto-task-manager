@@ -132,6 +132,13 @@ whatever the project calls them; names differ per project and language), looked
 up in the project. An unknown type is a plan error that lists the project's
 types.
 
+`priority` is optional for Jira (author's call): many projects, team-managed
+ones especially, have no priority field on the create screen. `priority` and
+`story_points` are sent only when the plan sets them. If the plan sets one and
+the project does not offer that field, that is a plan error naming the field
+and the node. If the plan leaves it out, nothing is sent and nothing is
+reported.
+
 `parent` is `null`, another node's `id`, or an existing issue key. A parent that
 Jira's hierarchy does not allow (for example a Story under a Sub-task) is a
 plan error, reported before anything is created.
@@ -184,9 +191,30 @@ file. `jira-*` skills act only when `.jira.json` exists, `redmine-*` skills only
 when `.redmine.json` exists. If a repository has both, the skill stops and asks
 which tracker the person means. It never picks one.
 
+### What "read back and verified" means for Jira (author's call)
+
+Jira normalises what it stores, so a byte-for-byte comparison of rich text
+would fail on a correct write.
+
+- Structured fields are compared exactly after reading the issue back: status,
+  issue type, parent, priority, story points, and each transition field.
+  A mismatch is a failure, reported as in the Redmine tool.
+- A comment is verified by its marker line, as for Redmine.
+- A description is verified only as present and non-empty. The report says
+  "description written, content not compared". That is a note and not a
+  failure, and it is never presented as a full verification.
+
 ## Constraints
 
 - Python 3 standard library only.
+- Where the work is built (author's call): the implementation branches from
+  `docs/jira-support-design`, which sits on top of the three open PRs, because
+  the feature needs what each of them adds (`AGENTS.md` and `.agents/skills/`,
+  the `YYYY-MM-DD-<topic>` session convention, version 0.3.0 and its pinning
+  test). It is opened as a PR only after those three are merged, so it never
+  forces them to change. Edits to files shared with those PRs (`README.md`,
+  `AGENTS.md`, `plugin.json`, `marketplace.json`, `__version__`) go in their own
+  final commit, so a rebase after a review-driven change stays small.
 - Tests need no network. Following `tests/fake_redmine.py`, a fake Jira server
   covers the client and apply paths.
 - Version: this is a new feature, so a minor bump (to 0.4.0), applied to
