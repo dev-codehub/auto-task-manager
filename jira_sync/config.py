@@ -60,12 +60,19 @@ def load_config(path: str) -> Config:
         value = raw.get(key)
         if not isinstance(value, str) or not value.strip():
             raise ConfigError(f"{path}: '{key}' is required")
+        if value.strip().startswith(_PLACEHOLDER):
+            raise ConfigError(
+                f"{path}: '{key}' is not filled in - replace the {_PLACEHOLDER} value")
     url = raw["url"].strip().rstrip("/")
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme == "http" and (parsed.hostname or "") not in _LOOPBACK:
         raise ConfigError(
             f"{path}: {url} is plain http - the API token would be sent in "
             f"cleartext; use https")
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ConfigError(
+            f"{path}: 'url' is {url!r}, which is not a site address - a Jira Cloud url "
+            f"looks like https://<site>.atlassian.net")
     updates_dir = raw.get("updates_dir", "jira/session-updates")
     if not isinstance(updates_dir, str) or not updates_dir.strip():
         raise ConfigError(f"{path}: 'updates_dir' must be a non-empty string")

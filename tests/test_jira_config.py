@@ -78,6 +78,36 @@ class JiraConfigTests(unittest.TestCase):
         path = self.config(url="http://127.0.0.1:8080", project="WIT")
         self.assertEqual(load_config(path).url, "http://127.0.0.1:8080")
 
+    def test_unfilled_url_or_project_is_reported_not_filled_in(self):
+        for key in ("url", "project"):
+            raw = {"url": "https://x.atlassian.net", "project": "WIT"}
+            raw[key] = "PREENCHE: o valor"
+            path = self.config(**raw)
+            with self.assertRaises(ConfigError) as cm:
+                load_config(path)
+            self.assertIn("not filled in", str(cm.exception), key)
+            self.assertIn(f"'{key}'", str(cm.exception), key)
+
+    def test_the_shipped_template_is_reported_not_filled_in(self):
+        template = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "jira.example.json")
+        with self.assertRaises(ConfigError) as cm:
+            load_config(template)
+        self.assertIn("'url' is not filled in", str(cm.exception))
+
+    def test_url_without_a_scheme_or_host_says_what_a_jira_url_looks_like(self):
+        for bad in ("lj-test-jira.atlassian.net", "ftp://x.atlassian.net", "https://",
+                    "https:///rest", "x.atlassian.net/jira"):
+            path = self.config(url=bad, project="WIT")
+            with self.assertRaises(ConfigError, msg=bad) as cm:
+                load_config(path)
+            self.assertIn("https://<site>.atlassian.net", str(cm.exception), bad)
+            self.assertIn("'url'", str(cm.exception), bad)
+
+    def test_url_on_any_https_host_is_accepted(self):
+        path = self.config(url="https://jira.example.com", project="WIT")
+        self.assertEqual(load_config(path).url, "https://jira.example.com")
+
     def test_story_points_field_must_look_like_customfield_digits(self):
         path = self.config(url="https://x.atlassian.net", project="WIT",
                            story_points_field="customfield_10016")
