@@ -189,7 +189,8 @@ class JiraRenderTests(unittest.TestCase):
             {"id": "41", "name": "Close", "to": "Done", "fields": {"resolution": RESOLUTION}})
         text = self.format(Update("SCRUM-1", "n", status="Done"))
         row = text.split("SCRUM-1", 1)[1]
-        self.assertIn("error: transition 'Close' requires 'Resolution', one of: Done, Won't Do",
+        self.assertIn("error: transition 'Close' requires 'Resolution' (resolution), one of: "
+                      "Done, Won't Do",
                       row)
         self.assertIn("1 error(s) - nothing will be written", text)
 

@@ -163,6 +163,54 @@ class PlanTests(unittest.TestCase):
             self.assertFalse(p.ok, bad)
             self.assertIn(next(iter(bad)), p.errors[0])
 
+    def test_a_name_two_fields_share_is_an_error_naming_both_ids(self):
+        self.finish_fields({
+            "customfield_1": {"required": True, "name": "Notes", "schema": {"type": "string"}},
+            "customfield_2": {"required": False, "name": "Notes", "schema": {"type": "string"}}})
+        p = self.plan(Update("SCRUM-3", "a", status="Done", transition_fields={"Notes": "x"}))
+        self.assertFalse(p.ok)
+        self.assertEqual(len(p.errors), 1, p.errors)
+        self.assertIn("Notes (customfield_1)", p.errors[0])
+        self.assertIn("Notes (customfield_2)", p.errors[0])
+        self.assertIn("field id", p.errors[0])
+        self.assertEqual(p.rows[0].fields, {})
+        # Both optional: still an error, never a silent pick.
+        self.finish_fields({
+            "customfield_1": {"required": False, "name": "Notes", "schema": {"type": "string"}},
+            "customfield_2": {"required": False, "name": "notes", "schema": {"type": "string"}}})
+        p = self.plan(Update("SCRUM-3", "a", status="Done", transition_fields={"NOTES": "x"}))
+        self.assertFalse(p.ok)
+        self.assertIn("customfield_1", p.errors[0])
+        self.assertIn("customfield_2", p.errors[0])
+        # The field id picks one.
+        p = self.plan(Update("SCRUM-3", "a", status="Done",
+                             transition_fields={"customfield_2": "x"}))
+        self.assertTrue(p.ok, p.errors)
+        self.assertEqual(p.rows[0].fields, {"customfield_2": "x"})
+
+    def test_one_field_given_twice_is_an_error(self):
+        self.finish_fields({"resolution": RESOLUTION})
+        for given in ({"Resolution": "Done", "resolution": "Won't Do"},
+                      {"Resolution": "Done", "RESOLUTION": "Done"}):
+            p = self.plan(Update("SCRUM-3", "a", status="Done", transition_fields=given))
+            self.assertFalse(p.ok, given)
+            self.assertEqual(len(p.errors), 1, p.errors)
+            self.assertIn("more than once", p.errors[0])
+            self.assertIn("(resolution)", p.errors[0])
+
+    def test_missing_required_field_error_names_the_field_id(self):
+        self.finish_fields({
+            "customfield_1": {"required": True, "name": "Notes", "schema": {"type": "string"}}})
+        p = self.plan(Update("SCRUM-3", "a", status="Done"))
+        self.assertFalse(p.ok)
+        self.assertIn("requires 'Notes' (customfield_1)", p.errors[0])
+        self.finish_fields({"resolution": RESOLUTION})
+        p = self.plan(Update("SCRUM-3", "a", status="Done"))
+        self.assertIn("requires 'Resolution' (resolution)", p.errors[0])
+        self.finish_fields({"customfield_10050": REVIEWER})
+        p = self.plan(Update("SCRUM-3", "a", status="Done"))
+        self.assertIn("requires 'Reviewer' (customfield_10050)", p.errors[0])
+
     def test_option_value_not_in_allowed_values_is_an_error(self):
         self.finish_fields({"resolution": RESOLUTION})
         p = self.plan(Update("SCRUM-3", "a", status="Done",

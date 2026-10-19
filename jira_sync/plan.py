@@ -138,22 +138,43 @@ def resolve_transition_fields(transition: dict,
                                                                  List[Tuple[str, Any]], List[str]]:
     """Matches an update's transition_fields (by field name, casefolded, or id)
     to the transition's fields and checks every required one is covered.
-    Returns (fields keyed by id for the API, labels, errors)."""
+    A name two fields share, or one field given twice, is an error - never a
+    silent pick. Returns (fields keyed by id for the API, labels, errors)."""
     metas: Dict[str, dict] = transition.get("fields") or {}
-    by_name = {str(m.get("name", fid)).casefold(): fid for fid, m in metas.items()}
+    by_name: Dict[str, List[str]] = {}
+    for fid, m in metas.items():
+        by_name.setdefault(str(m.get("name", fid)).casefold(), []).append(fid)
     fields: Dict[str, Any] = {}
     labels: List[Tuple[str, Any]] = []
     errors: List[str] = []
-    given = set()
+    given: Dict[str, str] = {}
     for name, value in supplied.items():
-        fid = name if name in metas else by_name.get(name.strip().casefold())
+        if name in metas:
+            fid = name
+        else:
+            candidates = by_name.get(name.strip().casefold(), [])
+            if len(candidates) > 1:
+                both = ", ".join(f"{metas[f].get('name', f)} ({f})" for f in candidates)
+                errors.append(f"transition '{transition.get('name')}' has more than one field "
+                              f"named '{name}': {both}; use the field id as the key in "
+                              f"'transition_fields'")
+                for f in candidates:
+                    given.setdefault(f, name)
+                continue
+            fid = candidates[0] if candidates else None
         if fid is None:
             names = ", ".join(str(m.get("name", f)) for f, m in metas.items()) or "none"
             errors.append(f"transition '{transition.get('name')}' has no field '{name}'; "
                           f"its fields: {names}")
             continue
-        given.add(fid)
         meta = metas[fid]
+        if fid in given:
+            errors.append(f"'{meta.get('name', fid)}' ({fid}) is given more than once in "
+                          f"'transition_fields', as '{given[fid]}' and '{name}'; keep one")
+            fields.pop(fid, None)
+            labels = [label for label in labels if label[0] != meta.get("name", fid)]
+            continue
+        given[fid] = name
         if _field_kind(meta) is None:
             errors.append(f"'{meta.get('name', fid)}': {_UNSUPPORTED}")
             continue
@@ -166,16 +187,13 @@ def resolve_transition_fields(transition: dict,
     for fid, meta in metas.items():
         if fid in given or not meta.get("required") or meta.get("hasDefaultValue"):
             continue
-        name = meta.get("name", fid)
+        needs = f"transition '{transition.get('name')}' requires '{meta.get('name', fid)}' ({fid})"
         if _field_kind(meta) is None:
-            errors.append(f"transition '{transition.get('name')}' requires '{name}': "
-                          f"{_UNSUPPORTED}")
+            errors.append(f"{needs}: {_UNSUPPORTED}")
         elif meta.get("allowedValues"):
-            errors.append(f"transition '{transition.get('name')}' requires '{name}', one of: "
-                          f"{_options(meta)}; add it under 'transition_fields'")
+            errors.append(f"{needs}, one of: {_options(meta)}; add it under 'transition_fields'")
         else:
-            errors.append(f"transition '{transition.get('name')}' requires '{name}'; "
-                          f"add it under 'transition_fields'")
+            errors.append(f"{needs}; add it under 'transition_fields'")
     return fields, labels, errors
 
 
