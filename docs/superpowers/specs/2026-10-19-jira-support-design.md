@@ -178,8 +178,15 @@ paragraph text, never dropped.
 
 Credentials, once per person: `JIRA_EMAIL` and `JIRA_API_TOKEN` in the
 environment, or both in `~/.config/jira-sync/credentials` (mode 600, refused
-otherwise, as for Redmine). The token is created at id.atlassian.com under
-Security. The skills never read that file.
+otherwise, as for Redmine). The file holds two lines, `JIRA_EMAIL=...` and
+`JIRA_API_TOKEN=...`. The token is created at
+https://id.atlassian.com/manage-profile/security/api-tokens. The skills never
+read that file. A value that still starts with `PREENCHE:` is the unfilled
+template and must be reported as "not filled in", never sent to Jira.
+
+Templates (author's call): `jira.example.json` at the repository root is the
+copy-and-fill template for `.jira.json`, like `redmine.example.json`.
+`TESTING.md` should point at it.
 
 The HTTP client refuses redirects, so the token is never re-sent to another
 host, and reports Jira's error messages in plain words.
