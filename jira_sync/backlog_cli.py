@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from typing import List, Mapping, Optional, TextIO
+
+from . import __version__
+from .backlog_apply import apply_backlog_plan, fix_parents, update_descriptions
+from .backlog_file import BacklogFile, BacklogFileError, load_backlog_file
+from .backlog_plan import build_backlog_plan
+from .client import Client, JiraError, NotFoundError
+from .config import Config, ConfigError, find_config, load_config, load_credentials
+from .render import (format_backlog_plan, format_backlog_report, format_description_report,
+                     format_parent_report)
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="jira-backlog",
+        description="Create epics/stories/tasks, links, and fix parents in Jira Cloud from a "
+                    "JSON plan file. apply is a dry run unless --write is given.")
+    parser.add_argument("--version", action="version", version=f"jira-backlog {__version__}")
+    parser.add_argument("--config", help="path to .jira.json (default: nearest one upward)")
+    sub = parser.add_subparsers(dest="command")
+    sub.required = True
+
+    plan_cmd = sub.add_parser("plan", help="read-only: validate a plan file against the site")
+    plan_cmd.add_argument("plan_file")
+
+    apply_cmd = sub.add_parser("apply", help="create issues and links from a plan file")
+    apply_cmd.add_argument("plan_file")
+    apply_cmd.add_argument("--write", action="store_true", help="apply (default: dry run)")
+
+    fix_cmd = sub.add_parser("fix-parents", help="report or fix parents against a plan file")
+    fix_cmd.add_argument("plan_file")
+    fix_cmd.add_argument("--write", action="store_true", help="fix (default: report only)")
+
+    desc_cmd = sub.add_parser("update-descriptions",
+                              help="update descriptions of already-created issues")
+    desc_cmd.add_argument("plan_file")
+    desc_cmd.add_argument("--only", help="comma-separated node ids (required with --write)")
+    desc_cmd.add_argument("--write", action="store_true", help="apply (default: dry run)")
+
+    return parser
+
+
+def main(argv: Optional[List[str]] = None, environ: Optional[Mapping[str, str]] = None,
+         cwd: Optional[str] = None, stdout: Optional[TextIO] = None,
+         stderr: Optional[TextIO] = None, credentials_path: Optional[str] = None) -> int:
+    out = stdout or sys.stdout
+    err = stderr or sys.stderr
+    here = cwd or os.getcwd()
+    args = _parser().parse_args(argv)
+    try:
+        config = load_config(args.config or find_config(here))
+        email, token = load_credentials(environ, credentials_path)
+        path = args.plan_file if os.path.isabs(args.plan_file) \
+            else os.path.join(here, args.plan_file)
+        file = load_backlog_file(path)
+        if file.project != config.project:
+            raise ConfigError(f"{path}: project '{file.project}' does not match "
+                              f"'{config.project}' in {config.path}")
+        client = Client(config.url, email, token)
+        try:
+            client.get_project(config.project)
+        except NotFoundError:
+            raise ConfigError(f"project '{config.project}' in {config.path} does not exist "
+                              f"or is not visible to you") from None
+
+        if args.command == "plan":
+            return _plan(client, config, file, out)
+        if args.command == "apply":
+            return _apply(client, config, file, args.write, out)
+        if args.command == "fix-parents":
+            return _fix_parents(client, file, args.write, out)
+        return _update_descriptions(client, file, args.only, args.write, out, err)
+    except (ConfigError, BacklogFileError, JiraError, OSError) as e:
+        print(f"error: {e}", file=err)
+        return 1
+
+
+def _plan(client: Client, config: Config, file: BacklogFile, out: TextIO) -> int:
+    plan = build_backlog_plan(client, file, config.story_points_field)
+    print(format_backlog_plan(plan), file=out)
+    return 0 if plan.ok else 1
+
+
+def _apply(client: Client, config: Config, file: BacklogFile, write: bool, out: TextIO) -> int:
+    plan = build_backlog_plan(client, file, config.story_points_field)
+    print(format_backlog_plan(plan), file=out)
+    if not plan.ok:
+        return 1
+    if not write:
+        print("\ndry run - nothing written. Re-run with --write to apply.", file=out)
+        return 0
+    print("\nwriting...", file=out)
+    report = apply_backlog_plan(client, plan, write=True)
+    print(format_backlog_report(report), file=out)
+    return 1 if report.error else 0
+
+
+def _fix_parents(client: Client, file: BacklogFile, write: bool, out: TextIO) -> int:
+    report = fix_parents(client, file, write=write)
+    print(format_parent_report(report), file=out)
+    if not write and report.wrong:
+        print(f"\nReport only. Re-run with --write to set those {len(report.wrong)} parents.",
+              file=out)
+    return 1 if report.error or report.not_confirmed else 0
+
+
+def _update_descriptions(client: Client, file: BacklogFile, only: Optional[str], write: bool,
+                         out: TextIO, err: TextIO) -> int:
+    names = [x.strip() for x in only.split(",") if x.strip()] if only else []
+    if write and not names:
+        print("error: --write requires --only=ID,ID (at least one id) - this operation "
+              "has no other safety net once it writes", file=err)
+        return 1
+    report = update_descriptions(client, file, names, write=write)
+    print(format_description_report(report), file=out)
+    if not write:
+        print("\ndry run - nothing written. Re-run with --write and --only to apply.", file=out)
+    return 1 if report.error else 0

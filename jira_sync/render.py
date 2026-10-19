@@ -66,3 +66,88 @@ def format_report(report: Report) -> str:
     else:
         out.append(f"done: {written} written, {skipped} skipped")
     return "\n".join(out)
+
+
+def format_backlog_plan(plan) -> str:
+    new = sum(1 for pn in plan.order if not pn.exists)
+    lines = [f"project {plan.project_key}: {new} to create, {len(plan.order) - new} already "
+             f"there, {len(plan.relations)} relation(s)"]
+    for pn in plan.order:
+        if pn.exists:
+            lines.append(f"  {pn.node.id:14} already exists as {pn.issue_key}")
+            continue
+        what = f"would create {pn.node.type}"
+        if pn.parent_ref:
+            what += f" (parent {pn.parent_ref})"
+        if pn.node.priority is not None:
+            what += f", priority {pn.node.priority}"
+        if pn.node.story_points is not None:
+            what += f", story points {display(pn.node.story_points)}"
+        lines.append(f"  {pn.node.id:14} {what}")
+    for pr in plan.relations:
+        r = pr.relation
+        lines.append(f"  {r.from_id} {r.type} {r.to_id}"
+                     f"{'  (already exists)' if pr.exists else ''}")
+    if plan.errors:
+        lines.append("")
+        lines.append(f"{len(plan.errors)} problem(s) - nothing will be written:")
+        lines.extend(f"  - {e}" for e in plan.errors)
+    return "\n".join(lines)
+
+
+def format_backlog_report(report) -> str:
+    lines: List[str] = []
+    for o in report.nodes:
+        lines.append(f"  {o.result:12} {o.node_id:14} {o.issue_key or ''}".rstrip())
+        lines.extend(f"    ok: {v}" for v in o.verified)
+        lines.extend(f"    note: {n}" for n in o.notes)
+        lines.extend(f"    warning: {w}" for w in o.warnings)
+    for r in report.relations:
+        lines.append(f"  {r.result:12} {r.label}")
+        lines.extend(f"    warning: {w}" for w in r.warnings)
+    created = sum(1 for o in report.nodes if o.result == "created")
+    skipped = sum(1 for o in report.nodes if o.result == "skipped")
+    lines.append("")
+    if report.error:
+        lines.append(f"stopped at {report.error}")
+        lines.append(f"{created} issue(s) created before the stop; re-run the same command to "
+                     f"resume - what already exists is skipped")
+    else:
+        links = sum(1 for r in report.relations if r.result == "created")
+        lines.append(f"done: {created} created, {skipped} skipped; {links} link(s) created, "
+                     f"{len(report.relations) - links} skipped")
+    return "\n".join(lines)
+
+
+def format_parent_report(report) -> str:
+    lines = [f"correct: {report.correct}   wrong: {len(report.wrong)}   "
+             f"absent: {len(report.absent)}   unresolved: {len(report.unresolved)}   "
+             f"ambiguous: {len(report.ambiguous)}"]
+    for fix in report.wrong:
+        if fix.node_id in report.fixed:
+            status = "  (fixed)"
+        elif fix.node_id in report.not_confirmed:
+            status = "  (write sent but did not land - check permissions and the edit screen)"
+        else:
+            status = ""
+        lines.append(f"  {fix.node_id:14} {fix.issue_key}  parent {fix.current or 'NONE'} -> "
+                     f"{fix.wanted or 'NONE'}{status}")
+    for nid in report.absent:
+        lines.append(f"  {nid:14} not in the project - nothing to fix")
+    for nid in report.unresolved:
+        lines.append(f"  {nid:14} parent not resolvable")
+    for nid in report.ambiguous:
+        lines.append(f"  {nid:14} matches more than one issue - not touched")
+    if report.error:
+        lines.append(f"\nerror: {report.error}")
+    return "\n".join(lines)
+
+
+def format_description_report(report) -> str:
+    lines: List[str] = []
+    for o in report.outcomes:
+        lines.append(f"  {o.result:18} {o.node_id:14} {o.issue_key or '(no issue)'}")
+        lines.extend(f"    note: {n}" for n in o.notes)
+    if report.error:
+        lines.append(f"\nerror: {report.error}")
+    return "\n".join(lines)

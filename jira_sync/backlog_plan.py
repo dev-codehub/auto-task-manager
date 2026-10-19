@@ -256,7 +256,12 @@ def build_backlog_plan(client: Client, file: BacklogFile,
         for rel in file.relations:
             link_type = chosen[rel.type]
             source, target = issue_of(rel.from_id), issue_of(rel.to_id)
-            exists = (link_type is not None and source is not None and target is not None
+            if rel.from_id == rel.to_id or (source is not None and target is not None
+                                            and source["key"] == target["key"]):
+                where = f" ({source['key']})" if source is not None else ""
+                errors.append(f"relation {rel.from_id} {rel.type} {rel.to_id}: links an issue "
+                              f"to itself{where}; remove it")
+            exists =(link_type is not None and source is not None and target is not None
                       and _link_exists((source.get("fields") or {}).get("issuelinks") or [],
                                        link_type, target["key"]))
             relations.append(PlannedRelation(

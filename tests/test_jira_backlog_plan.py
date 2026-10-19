@@ -257,6 +257,20 @@ class BacklogPlanTests(unittest.TestCase):
         self.assertEqual([r.link_type for r in plan.relations], ["BLOCKS", "Relates"])
         self.assertFalse(any(r.exists for r in plan.relations))
 
+    def test_relation_from_an_issue_to_itself_is_an_error(self):
+        key = self.fake.add_issue("EX-01 Build the thing", type_name="Story")  # SCRUM-4
+        nodes = [{"id": "EX-01", "subject": "EX-01 Build the thing", "description": "d",
+                  "type": "Story", "parent": None}]
+        for rel in ({"type": "blocks", "from": "EX-01", "to": "EX-01"},
+                    {"type": "relates", "from": "EX-01", "to": f"#{key}"}):
+            with self.subTest(rel):
+                plan = self.plan(doc(nodes=nodes, relations=[rel]))
+                self.assertFalse(plan.ok)
+                msg = " ".join(plan.errors)
+                self.assertIn("itself", msg)
+                self.assertIn(key, msg)
+        self.assertEqual(self.fake.writes, [])
+
     def test_relation_already_present_in_issuelinks_is_marked_existing(self):
         blocker = self.fake.add_issue("EX-01 Build the thing", type_name="Story")
         blocked = self.fake.add_issue("EX-02 Test the thing", type_name="Story")
