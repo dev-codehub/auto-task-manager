@@ -63,8 +63,8 @@ update; the person approves it; only then is anything written.
      existing comments use.
    - `status` (optional): the target status name, as Jira shows it (for
      example `In Progress` or `Done`). Give only the name; the tool finds the
-     transition that leads there and reports an error, listing the transitions
-     that are available, if there is none. Set it only when the evidence
+     transition that leads there and reports an error, listing the statuses
+     reachable from where the issue is now, if there is none. Set it only when the evidence
      supports a move; omit it otherwise. Move to a finished status (`Done` or
      the instance's equivalent) only when the work is finished and verified.
    - `story_points` (optional, a number of 0 or more): set only when the person

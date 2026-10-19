@@ -236,7 +236,7 @@ An update file:
 - `note` (required): the comment.
 - `status` (optional): the target status *name*, as Jira shows it. The tool
   finds the transition that leads there; if there is none it reports an error
-  listing the transitions that are available.
+  listing the statuses reachable from where the issue is now.
 - `story_points` (optional): a number of 0 or more. Jira has no `% Done`;
   story points take its place, and they change only when given - an issue's
   points are never inferred or touched otherwise.

@@ -41,8 +41,11 @@ The order is always: validate (`plan`), dry-run (`apply`), ask, and only then
    and `story_points` (a number of 0 or more; set it only when the person
    gives a value). A `relations` entry has `type` (one of
    `relates`/`duplicates`/`blocks` - Jira has no `precedes`), `from` and `to`,
-   each a node `id` or `#PROJ-123`. A node whose subject already exists in the
-   project is reported as already there and skipped. Validate the file first,
+   each a node `id` or `#PROJ-123`. A node is matched to an issue by its `id`:
+   an issue in the project whose summary's first word (up to any `:`) is that
+   id, in any case (for example `ST-01 Login page` or `st-01: Login page` for
+   `ST-01`), is reported as already there and skipped;
+   more than one such issue is an error, never a pick. Validate the file first,
    read-only: `jira-backlog plan <file>`. Fix every problem it reports before
    moving on - nothing is created yet.
 
