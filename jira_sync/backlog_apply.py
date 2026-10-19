@@ -108,8 +108,8 @@ def apply_backlog_plan(client: Client, plan: BacklogPlan, write: bool) -> Backlo
         if not write:
             report.relations.append(RelationOutcome(label, "would create"))
             continue
-        assert pr.link_type is not None
-        inward, outward = link_endpoints(from_key, to_key, {"name": pr.link_type})
+        assert pr.link_type is not None and pr.site_link_type is not None
+        inward, outward = link_endpoints(from_key, to_key, pr.site_link_type)
         try:
             client.create_link(pr.link_type, inward, outward)
             links = (client.get_issue(from_key, ("issuelinks",)).get("fields") or {}).get(
@@ -117,10 +117,13 @@ def apply_backlog_plan(client: Client, plan: BacklogPlan, write: bool) -> Backlo
         except JiraError as e:
             report.error = f"relation {label}: {e}"
             return report
-        # Presence only; which end is which is link_endpoints' call.
-        if not _link_exists(links, {"name": pr.link_type}, to_key):
+        # The same direction-sensitive reading the plan uses on a re-run: if
+        # link_endpoints and the site disagree, stop here rather than report
+        # "created" and post the link again on every re-run.
+        if not _link_exists(links, pr.site_link_type, to_key):
             report.error = (f"relation {label}: Jira accepted the link but {from_key} does not "
-                            f"show a '{pr.link_type}' link to {to_key}")
+                            f"show a '{pr.link_type}' link to {to_key} in that direction - "
+                            f"check the link in Jira before re-running")
             return report
         report.relations.append(RelationOutcome(label, "created"))
 

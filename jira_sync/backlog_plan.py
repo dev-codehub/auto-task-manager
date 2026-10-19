@@ -28,6 +28,9 @@ class PlannedRelation:
     exists: bool
     # The site's own name for the link type, as POST /issueLink wants it.
     link_type: Optional[str] = None
+    # The site's whole link type ({id, name, inward, outward}), so apply checks
+    # a new link with the same direction-sensitive reading as this plan.
+    site_link_type: Optional[dict] = None
 
 
 @dataclass
@@ -107,7 +110,10 @@ def _link_exists(links: List[dict], link_type: dict, other_key: str) -> bool:
     outward wording, e.g. Relates) either side counts.
     Unconfirmed against a real site until Task 10."""
     name = str(link_type.get("name", "")).casefold()
-    symmetric = link_type.get("inward") == link_type.get("outward")
+    # Symmetric only when both wordings are there and equal: a type read
+    # without its wording is never taken for one.
+    inward_word = link_type.get("inward")
+    symmetric = inward_word is not None and inward_word == link_type.get("outward")
     for link in links or []:
         if str((link.get("type") or {}).get("name", "")).casefold() != name:
             continue
@@ -266,7 +272,8 @@ def build_backlog_plan(client: Client, file: BacklogFile,
                                        link_type, target["key"]))
             relations.append(PlannedRelation(
                 relation=rel, exists=exists,
-                link_type=link_type.get("name") if link_type is not None else None))
+                link_type=link_type.get("name") if link_type is not None else None,
+                site_link_type=link_type))
 
     return BacklogPlan(project_key=project_key, order=planned, relations=relations,
                        errors=errors, story_points_field=points_field)

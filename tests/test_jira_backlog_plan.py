@@ -4,7 +4,7 @@ import json
 import unittest
 
 from jira_sync.backlog_file import parse_backlog_file
-from jira_sync.backlog_plan import build_backlog_plan, index_by_key, resolve_key
+from jira_sync.backlog_plan import _link_exists, build_backlog_plan, index_by_key, resolve_key
 from jira_sync.client import Client
 from tests.fake_jira import demo_fake
 
@@ -270,6 +270,15 @@ class BacklogPlanTests(unittest.TestCase):
                 self.assertIn("itself", msg)
                 self.assertIn(key, msg)
         self.assertEqual(self.fake.writes, [])
+
+    def test_a_link_type_without_its_wording_is_not_taken_for_symmetric(self):
+        inward_entry = [{"type": {"name": "Blocks"}, "inwardIssue": {"key": "B-1"}}]
+        self.assertFalse(_link_exists(inward_entry, {"name": "Blocks"}, "B-1"))
+        self.assertFalse(_link_exists(inward_entry, {"name": "Blocks", "inward": "is blocked by",
+                                                     "outward": "blocks"}, "B-1"))
+        relates = [{"type": {"name": "Relates"}, "inwardIssue": {"key": "B-1"}}]
+        self.assertTrue(_link_exists(relates, {"name": "Relates", "inward": "relates to",
+                                               "outward": "relates to"}, "B-1"))
 
     def test_relation_already_present_in_issuelinks_is_marked_existing(self):
         blocker = self.fake.add_issue("EX-01 Build the thing", type_name="Story")

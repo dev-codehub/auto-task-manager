@@ -184,6 +184,27 @@ class BacklogApplyTests(Base):
         again = build_backlog_plan(self.client, self.file(d))
         self.assertEqual([r.exists for r in again.relations], [True])
 
+    def test_a_link_that_reads_back_the_other_way_stops_the_run(self):
+        # A site whose orientation disagrees with link_endpoints: apply must stop
+        # at the first link, not report "created" and post it again next run.
+        link = self.fake._link
+
+        def flipped(body):
+            return link(dict(body, inwardIssue=body.get("outwardIssue"),
+                             outwardIssue=body.get("inwardIssue")))
+
+        self.fake._link = flipped
+        d = doc([node("EX-01", "Story"), node("EX-02", "Story"), node("EX-03", "Story")],
+                [{"type": "blocks", "from": "EX-01", "to": "EX-02"},
+                 {"type": "blocks", "from": "EX-02", "to": "EX-03"}])
+        report = self.apply(d)
+        self.assertIsNotNone(report.error)
+        self.assertIn("EX-01 blocks EX-02", report.error)
+        self.assertIn("does not show", report.error)
+        self.assertEqual(report.relations, [])
+        links = [w for w in self.fake.writes if w[1] == "/rest/api/3/issueLink"]
+        self.assertEqual(len(links), 1)
+
     def test_identical_relations_listed_twice_create_one_link(self):
         rel = {"type": "blocks", "from": "EX-01", "to": "EX-02"}
         report = self.apply(doc([node("EX-01", "Story"), node("EX-02", "Story")],
