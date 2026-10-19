@@ -3,12 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from .client import Client, JiraError
+from .client import Client, JiraError, TransportError
 from .plan import Plan, Row, has_marker, with_marker_adf
 
 
 class ApplyError(Exception):
     pass
+
+
+class _CommentUncertain(Exception):
+    """add_comment failed in a way that does not say whether Jira stored it."""
 
 
 @dataclass
@@ -71,6 +75,10 @@ def _apply_row(client: Client, plan: Plan, row: Row) -> Outcome:
     verified: List[str] = []
     try:
         _write_row(client, plan, row, verified)
+    except _CommentUncertain as e:
+        done = f"already done on this issue: {', '.join(verified)}; " if verified else ""
+        raise ApplyError(f"{e} ({done}the comment may not have been written - a re-run checks "
+                         f"for the marker and writes the comment only if it is missing)") from None
     except (ApplyError, JiraError) as e:
         if verified:
             raise ApplyError(f"{e} (already done on this issue: {', '.join(verified)}; "
@@ -97,7 +105,11 @@ def _write_row(client: Client, plan: Plan, row: Row, verified: List[str]) -> Non
                 f"Jira accepted the edit without storing it; the story points field "
                 f"({plan.story_points_field}) is probably not on this issue's edit screen")
         verified.append(f"story points {display(target)}")
-    client.add_comment(key, with_marker_adf(row.update.note, plan.session))
+    try:
+        client.add_comment(key, with_marker_adf(row.update.note, plan.session))
+    except TransportError as e:
+        # A timeout or a 5xx can come after Jira stored the comment.
+        raise _CommentUncertain(str(e)) from None
     if not has_marker(client.list_comments(key), plan.session, plan.account_id):
         raise ApplyError("the comment was sent but is not on the issue")
     verified.append("comment recorded")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from jira_sync.apply import apply_plan
-from jira_sync.client import Client
+from jira_sync.client import Client, ForbiddenError, TransportError
 from jira_sync.config import Config
 from jira_sync.plan import build_plan, has_marker
 from jira_sync.render import format_plan, format_report
@@ -120,6 +120,45 @@ class JiraApplyTests(unittest.TestCase):
         self.assertIsNone(report.error)
         self.assertEqual([p for _, p, _ in self.fake.writes],
                          ["/rest/api/3/issue/SCRUM-1/comment"])
+
+    def test_a_lost_answer_to_the_comment_says_it_may_not_have_been_written(self):
+        def times_out(key, adf):
+            raise TransportError(f"cannot reach {self.fake.url} (timed out)")
+
+        self.client.add_comment = times_out
+        report = self.run_apply(Update("SCRUM-1", "start it", status="In Progress"))
+        self.assertIn("timed out", report.error)
+        self.assertIn("status To Do -> In Progress", report.error)
+        self.assertIn("the comment may not have been written", report.error)
+        self.assertIn("a re-run checks for the marker", report.error)
+        self.assertNotIn("the comment was not written", report.error)
+
+    def test_a_comment_jira_refused_after_other_writes_says_it_was_not_written(self):
+        def refuses(key, adf):
+            raise ForbiddenError("your account is not allowed to do this")
+
+        self.client.add_comment = refuses
+        report = self.run_apply(Update("SCRUM-1", "start it", status="In Progress"))
+        self.assertIn("the comment was not written", report.error)
+
+    def test_rerun_after_story_points_failed_does_not_transition_again(self):
+        row = Update("SCRUM-1", "start it", status="In Progress", story_points=3)
+        self.fake.ignored_fields = {POINTS}
+        first = self.run_apply(row)
+        self.assertIn("story points", first.error)
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"]["status"], {"name": "In Progress"})
+        self.assertEqual(self.comments("SCRUM-1"), [])
+
+        self.fake.ignored_fields = set()
+        writes = len(self.fake.writes)
+        second = self.run_apply(row)
+        self.assertIsNone(second.error)
+        later = [(m, p) for m, p, _ in self.fake.writes[writes:]]
+        self.assertNotIn(("POST", "/rest/api/3/issue/SCRUM-1/transitions"), later)
+        self.assertEqual(self.fake.issues["SCRUM-1"]["fields"][POINTS], 3)
+        self.assertEqual(len(self.comments("SCRUM-1")), 1)
+        transitions = [w for w in self.fake.writes if w[1].endswith("/transitions")]
+        self.assertEqual(len(transitions), 1)
 
     def test_rerun_skips_rows_already_applied(self):
         rows = (Update("SCRUM-1", "start it", status="In Progress", story_points=2),
