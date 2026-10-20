@@ -4,7 +4,8 @@ import json
 import unittest
 
 from jira_sync.adf import markdown_to_adf
-from jira_sync.backlog_apply import apply_backlog_plan, fix_parents, update_descriptions
+from jira_sync.backlog_apply import (apply_backlog_plan, fix_parents, link_endpoints,
+                                     update_descriptions)
 from jira_sync.backlog_file import parse_backlog_file
 from jira_sync.backlog_plan import build_backlog_plan
 from jira_sync.client import Client, TransportError
@@ -208,6 +209,21 @@ class BacklogApplyTests(Base):
         # The plan reads the same link back as already there.
         again = build_backlog_plan(self.client, self.file(d))
         self.assertEqual([r.exists for r in again.relations], [True])
+
+    def test_link_endpoints_sends_the_blocking_issue_as_inward(self):
+        # Confirmed on a real Jira Cloud site, 2026-10-20: inwardIssue is the
+        # issue that "blocks".
+        blocks = {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"}
+        self.assertEqual(link_endpoints("A", "B", blocks), ("A", "B"))
+
+    def test_apply_posts_the_blocking_issue_as_inward(self):
+        d = doc([node("EX-01", "Story"), node("EX-02", "Story")],
+                [{"type": "blocks", "from": "EX-01", "to": "EX-02"}])
+        report = self.apply(d)
+        a, b = report.nodes[0].issue_key, report.nodes[1].issue_key
+        body = [w for w in self.fake.writes if w[1] == "/rest/api/3/issueLink"][-1][2]
+        self.assertEqual(body["inwardIssue"]["key"], a)
+        self.assertEqual(body["outwardIssue"]["key"], b)
 
     def test_a_link_that_reads_back_the_other_way_stops_the_run(self):
         # A site whose orientation disagrees with link_endpoints: apply must stop

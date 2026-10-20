@@ -129,9 +129,9 @@ def _link_exists(links: List[dict], link_type: dict, other_key: str) -> bool:
     """Whether an issue's `issuelinks` already hold this link to `other_key`.
     Read back on an issue, each entry names the other end; under
     `outwardIssue` when this issue plays the outward role ("this blocks
-    other"), as the fake models it. For a symmetric type (same inward and
+    other"). For a symmetric type (same inward and
     outward wording, e.g. Relates) either side counts.
-    Unconfirmed against a real site until Task 10."""
+    Confirmed on a real Jira Cloud site, 2026-10-20."""
     name = str(link_type.get("name", "")).casefold()
     # Symmetric only when both wordings are there and equal: a type read
     # without its wording is never taken for one.

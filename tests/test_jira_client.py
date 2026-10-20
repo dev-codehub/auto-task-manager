@@ -196,9 +196,15 @@ class JiraClientTests(unittest.TestCase):
         self.assertIn("customfield_10016", [f["id"] for f in self.client.list_fields()])
         self.assertEqual(self.client.link_types()[0]["name"], "Blocks")
         self.client.create_link("Blocks", "SCRUM-2", "SCRUM-3")
+        # Confirmed on a real Jira Cloud site, 2026-10-20: inwardIssue is the issue that
+        # "blocks". SCRUM-2 blocks SCRUM-3: its own entry names SCRUM-3 as outwardIssue,
+        # SCRUM-3's entry names SCRUM-2 as inwardIssue.
         links = self.client.get_issue("SCRUM-2")["fields"]["issuelinks"]
-        # Inward/outward orientation is unconfirmed until Task 10 checks it on a real site.
-        self.assertEqual(links[0]["inwardIssue"]["key"], "SCRUM-3")
+        self.assertEqual(links[0]["outwardIssue"]["key"], "SCRUM-3")
+        self.assertNotIn("inwardIssue", links[0])
+        links = self.client.get_issue("SCRUM-3")["fields"]["issuelinks"]
+        self.assertEqual(links[0]["inwardIssue"]["key"], "SCRUM-2")
+        self.assertNotIn("outwardIssue", links[0])
 
     def test_link_with_unknown_type_is_not_found(self):
         with self.assertRaises(NotFoundError):

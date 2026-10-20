@@ -281,14 +281,16 @@ class FakeJira:
                                            "permission to see it."], "errors": {}}
         lid = str(self._next_link_id)
         self._next_link_id += 1
-        # "A is blocked by B" is posted with inwardIssue=A, outwardIssue=B and is
-        # read back on A as an inwardIssue entry and on B as an outwardIssue one.
+        # Confirmed on a real Jira Cloud site, 2026-10-20: inwardIssue is the issue that
+        # "blocks". Posting inwardIssue=X, outwardIssue=Y makes X the source of the type's
+        # outward verb ("X blocks Y"): X's own entry names Y as outwardIssue, Y's entry
+        # names X as inwardIssue.
         inward["fields"]["issuelinks"].append(
             {"id": lid, "type": dict(link_type),
-             "inwardIssue": {"key": outward["key"], "id": outward["id"]}})
+             "outwardIssue": {"key": outward["key"], "id": outward["id"]}})
         outward["fields"]["issuelinks"].append(
             {"id": lid, "type": dict(link_type),
-             "outwardIssue": {"key": inward["key"], "id": inward["id"]}})
+             "inwardIssue": {"key": inward["key"], "id": inward["id"]}})
         return None
 
 

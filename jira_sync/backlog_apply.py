@@ -45,11 +45,10 @@ def link_endpoints(from_key: str, to_key: str, link_type: dict) -> Tuple[str, st
     uses to find an existing relation. `link_type` is the site's link type, in
     case one type ever needs its own orientation; none does today.
 
-    The orientation is the fake's model (tests/fake_jira.py: a POST with
-    inwardIssue=X, outwardIssue=Y reads back on Y with X as outwardIssue).
-    Task 10 must confirm it on a real site; if Jira turns out the other way,
-    the fix is this one line."""
-    return to_key, from_key
+    Confirmed on a real Jira Cloud site, 2026-10-20: inwardIssue is the issue
+    that "blocks" (the source of the type's outward verb), so a plan's
+    "from blocks to" is posted with inwardIssue=from, outwardIssue=to."""
+    return from_key, to_key
 
 
 def _endpoint(ref: str, keys: Dict[str, str]) -> str:
