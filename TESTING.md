@@ -11,7 +11,7 @@ de 30 minutos.
 ## O que precisas
 
 - Uma conta **Jira Cloud** (o endereço acaba em `.atlassian.net`) e um projeto
-  de teste.
+  de teste. Neste guia, "issue" é cada item do Jira (tarefa, épico, subtarefa...).
 - O **Claude Code** (ou o Codex).
 - **Python 3.9 ou superior.** Os comandos do plugin são programas em Python.
   Corre `python3 --version` no terminal: tem de aparecer 3.9 ou mais. Se não
@@ -71,7 +71,7 @@ cd ~/teste-jira
 claude --plugin-dir ~/auto-task-manager
 ```
 
-Escreve ao Claude, **por esta ordem**, e confere cada resultado no Jira:
+Escreve ao Claude, **por esta ordem**, e verifica cada resultado no Jira:
 
 1. *"Mostra o estado da issue PROJ-1"* (uma issue que exista). Deve dizer o
    estado, os story points e para que estados pode passar.
@@ -80,11 +80,11 @@ Escreve ao Claude, **por esta ordem**, e confere cada resultado no Jira:
    o que **seria** criado e não criar nada. Se os tipos de issue do teu projeto
    tiverem outros nomes (por exemplo "História"), o Claude diz-te quais
    existem: usa esses.
-3. *"Cria-os."* Depois de leres a simulação. Confere no Jira os tipos, quem é
+3. *"Cria-os."* Depois de leres a simulação. Verifica no Jira os tipos, quem é
    filho de quem e que **a tarefa bloqueia a subtarefa** (e não o contrário).
    Pede a seguir *"cria-os outra vez"*: não deve criar nada de novo.
 4. *"Fecha esta sessão: passa a tarefa para o estado final e põe 3 story
-   points."* Lê a simulação e aprova. Confere no Jira o estado, os story
+   points."* Lê a simulação e aprova. Verifica no Jira o estado, os story
    points e o comentário (acaba em `_jira-sync: ..._`). Se o Jira exigir um
    campo para fechar (por exemplo `Resolution`), o Claude pergunta-te o valor.
 5. Repete o pedido do passo 4: deve dizer que **já está feito**, sem segundo
@@ -101,7 +101,7 @@ Escreve ao Claude, **por esta ordem**, e confere cada resultado no Jira:
 | `no .jira.json found` | Não estás na pasta do projeto: faz `cd ~/teste-jira` antes de abrir o Claude Code. |
 | `type '...' does not exist ...; available: ...` | O projeto chama outra coisa a esse tipo de issue: usa um dos nomes listados. |
 
-Pára e reporta se algo não bater certo.
+Se algo não bater certo, para e diz-me.
 
 ## O que me enviar
 
