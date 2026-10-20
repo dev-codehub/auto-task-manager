@@ -34,7 +34,11 @@ Jira Cloud support, next to Redmine, in the same plugin.
 - A repository with both `.redmine.json` and `.jira.json` makes the skills stop
   and ask which tracker is meant.
 
-## 0.3.0
+## 0.3.1
+
+Re-labelled: these changes shipped on `main` with `plugin.json`, the
+marketplace entry and the CLI version saying `0.3.0`, but `0.3.0` is the Codex
+release below. Tag `0.3.1` marks the commit that contains them.
 
 ### Added
 - `required_fields_on_close` in `.redmine.json` and per-row `custom_fields` in
@@ -44,5 +48,16 @@ Jira Cloud support, next to Redmine, in the same plugin.
 
 ### Changed
 - The CLI version is aligned with `plugin.json`, pinned by a test.
+
+## 0.3.0
+
+Codex support, and a guide for testers. (Tag `0.3.0`; `plugin.json` still said
+`0.2.0` at that commit.)
+
+### Added
+- Codex CLI support through the Agent Skills open standard: `.agents/skills/`
+  links to the same `SKILL.md` files Claude Code reads, and `AGENTS.md`.
+- `TESTING.md`, a manual-install guide (zip) for Claude Code and Codex testers,
+  and the `redmine.example.json` template.
 
 Earlier versions: see the git history.
