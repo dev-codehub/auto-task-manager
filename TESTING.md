@@ -128,12 +128,16 @@ está no [README](README.md#jira).
 ## Checklist do Jira (jira-session-close e jira-backlog)
 
 O suporte a Jira foi testado contra uma simulação da API e contra **um** Jira
-Cloud de teste (criar issues, pais, story points, links, uma transição e as
-repetições). Ainda não foi visto num site real: transições com campos
-obrigatórios (por exemplo `Resolution`), `fix-parents`,
-`update-descriptions`, links `relates`/`duplicates`, prioridades. A primeira
-utilização no teu Jira deve por isso ser **acompanhada**, passo a passo, com
-confirmação na interface do Jira. Pára e reporta se algo não bater certo.
+Cloud de teste (criar Epic, Task e Subtask com pais, incluindo um pai já
+existente referido como `#KEY`; prioridade; story points; os três tipos de
+link; descrições em ADF; `update-descriptions`; `fix-parents`; fecho de sessão
+com transições para a frente e para trás; repetições imediatas; e a validação
+em dry-run). Ainda não foi visto num site real: transições com campos
+obrigatórios (por exemplo `Resolution`), limpar um campo com `null`,
+diferenças entre projetos team-managed e company-managed, workflows com campos
+obrigatórios, e os corpos de erro do Jira para além dos casos já vistos. A
+primeira utilização no teu Jira deve por isso ser **acompanhada**, passo a
+passo, com confirmação na interface do Jira. Pára e reporta se algo não bater certo.
 
 0. **Antes de tudo**, com o `bin/` no PATH (como acima): `jira-sync
    --version` e `jira-backlog --version` devem dizer `0.4.0`.

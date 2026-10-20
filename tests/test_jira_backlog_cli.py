@@ -171,12 +171,34 @@ class JiraBacklogCliTests(unittest.TestCase):
         self.assertIn("not filled in", err)
         self.assertEqual(self.fake.hits, 0)
 
+    def test_wrong_token_is_reported_before_anything_else_is_asked(self):
+        # Jira answers 404 on the project to credentials it does not know, so
+        # the identity check has to come first or the person is told the
+        # project is missing.
+        for command in ("plan", "apply", "fix-parents", "update-descriptions"):
+            with self.subTest(command=command):
+                del self.fake.requests[:]
+                code, _, err = self.run_cli(command, self.write_plan(self.doc()), environ={
+                    "JIRA_EMAIL": self.fake.email, "JIRA_API_TOKEN": "wrong"})
+                self.assertEqual(code, 1)
+                self.assertIn("API token was rejected", err)
+                self.assertNotIn("does not exist or is not visible", err)
+                self.assertEqual(self.fake.requests, ["GET /rest/api/3/myself"])
+
+    def test_wrong_email_is_reported_the_same_way(self):
+        code, _, err = self.run_cli("plan", self.write_plan(self.doc()), environ={
+            "JIRA_EMAIL": "someone-else@example.com", "JIRA_API_TOKEN": self.TOKEN})
+        self.assertEqual(code, 1)
+        self.assertIn("API token was rejected", err)
+        self.assertNotIn("does not exist or is not visible", err)
+        self.assertEqual(self.fake.requests, ["GET /rest/api/3/myself"])
+
     def test_unknown_config_project_exits_1(self):
         self.write_config({"url": self.fake.url, "project": "NOPE"})
         code, _, err = self.run_cli("plan", self.write_plan(self.doc(project="NOPE")))
         self.assertEqual(code, 1)
         self.assertIn("'NOPE'", err)
-        self.assertIn("not visible", err)
+        self.assertIn("does not exist or is not visible to you", err)
 
     def test_invalid_plan_file_exits_1(self):
         path = os.path.join(self.dir, "bad.json")

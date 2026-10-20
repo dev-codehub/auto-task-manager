@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- A wrong email or token is now reported as such; before, `jira-sync` and
+  `jira-backlog` said the project did not exist, because Jira answers 404 to
+  unrecognised credentials on everything except `/myself`.
+
 ## 0.4.0
 
 Jira Cloud support, next to Redmine, in the same plugin.

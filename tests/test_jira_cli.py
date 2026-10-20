@@ -116,12 +116,31 @@ class JiraCliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("API token was rejected", err)
 
+    def test_wrong_token_is_reported_before_anything_else_is_asked(self):
+        # Jira answers 404 on the project to credentials it does not know, so
+        # the identity check has to come first or the person is told the
+        # project is missing.
+        code, _, err = self.run_cli("status", "SCRUM-1", environ={
+            "JIRA_EMAIL": self.fake.email, "JIRA_API_TOKEN": "wrong"})
+        self.assertEqual(code, 1)
+        self.assertIn("API token was rejected", err)
+        self.assertNotIn("does not exist or is not visible", err)
+        self.assertEqual(self.fake.requests, ["GET /rest/api/3/myself"])
+
+    def test_wrong_email_is_reported_the_same_way(self):
+        code, _, err = self.run_cli("status", "SCRUM-1", environ={
+            "JIRA_EMAIL": "someone-else@example.com", "JIRA_API_TOKEN": self.TOKEN})
+        self.assertEqual(code, 1)
+        self.assertIn("API token was rejected", err)
+        self.assertNotIn("does not exist or is not visible", err)
+        self.assertEqual(self.fake.requests, ["GET /rest/api/3/myself"])
+
     def test_unknown_project(self):
         self.write_config({"url": self.fake.url, "project": "NOPE"})
         code, _, err = self.run_cli("status", "SCRUM-1")
         self.assertEqual(code, 1)
         self.assertIn("'NOPE'", err)
-        self.assertIn("not visible", err)
+        self.assertIn("does not exist or is not visible to you", err)
 
     def test_missing_config(self):
         with tempfile.TemporaryDirectory() as empty:
