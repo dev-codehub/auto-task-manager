@@ -35,7 +35,9 @@ Jira Cloud. There is one copy of each `SKILL.md`; both tools read it as-is.
    `jira.update.example.json` are starting points for a backlog plan and a
    session-update file). A repository with both
    `.redmine.json` and `.jira.json` is ambiguous: the skills stop and ask
-   which tracker is meant. The token is never read, printed or asked for by
+   which tracker is meant. Keep each file in the root of its own project, never
+   in a folder above several projects (the README's "Where `.redmine.json` and
+   `.jira.json` go" explains why). The token is never read, printed or asked for by
    the skill.
 
 4. Codex discovers the skills from `.agents/skills/` at the repository

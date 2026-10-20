@@ -31,6 +31,14 @@ class JiraClientTests(unittest.TestCase):
         self.assertIn("API token was rejected", str(cm.exception))
         self.assertNotIn("wrong-token-value", str(cm.exception))
 
+    def test_unrecognised_credentials_are_anonymous_like_on_a_real_site(self):
+        # /myself says 401, but the project and an issue just look missing.
+        client = Client(self.fake.url, self.fake.email, "wrong-token-value")
+        with self.assertRaises(NotFoundError):
+            client.get_project("SCRUM")
+        with self.assertRaises(NotFoundError):
+            client.get_issue("SCRUM-1", ["summary"])
+
     def test_search_follows_every_page(self):
         self.fake.add_issue("Fourth")
         self.fake.add_issue("Fifth")

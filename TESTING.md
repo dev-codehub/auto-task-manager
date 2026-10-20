@@ -1,193 +1,153 @@
-# Testar o plugin auto-task-manager (instalação manual, via zip)
+# Testar o auto-task-manager (versão alpha)
 
-Este guia é para quem recebeu o `.zip` (`auto-task-manager-0.4.0.zip`)
-diretamente, sem passar pelo `/plugin marketplace add`. O plugin tem skills
-para **Redmine** e para **Jira Cloud**: testa a que usas. As secções
-"Configurar o Redmine" e "Configurar o Jira" são independentes.
+Obrigado por testares! Este plugin liga o Claude Code (ou o Codex) ao Jira:
+no fim de uma sessão de trabalho atualiza as issues, e cria épicos, tarefas e
+subtarefas a partir de um plano.
 
-## Antes de começar (comum)
+**Nunca escreve no Jira sem te mostrar primeiro o que vai fazer e sem tu
+dizeres que sim.** Mesmo assim, usa um **projeto Jira de teste**. Demora cerca
+de 30 minutos.
 
-- Precisas de Python 3.9 ou superior (`python3 --version`); não há nada para
-  instalar.
-- Extrai o zip para uma pasta, por exemplo `~/auto-task-manager`:
-  ```bash
-  unzip auto-task-manager-0.4.0.zip -d ~/
-  ```
-- Trabalha sempre **a partir de dentro desta pasta** (`cd
-  ~/auto-task-manager` antes de abrires o Claude Code ou o Codex) — é isso
-  que lhes diz a que Redmine/Jira e a que projeto se referem os pedidos, e é
-  também aqui que o Codex vai encontrar `.agents/skills/`.
-- Não ponhas `.redmine.json` e `.jira.json` na mesma pasta: com os dois, as
-  skills param e perguntam qual dos trackers queres usar.
-- **Começa sempre pelos comandos só-de-leitura** (`status`, `plan`) antes de
-  aprovares qualquer escrita — nenhuma das skills escreve sem pedir
-  confirmação explícita primeiro.
-- Nunca coles chaves ou tokens numa conversa: as skills não os lêem nem os
-  pedem.
+## O que precisas
 
-## Configurar o Redmine
+- Uma conta **Jira Cloud** (o endereço acaba em `.atlassian.net`) e um projeto
+  de teste. Neste guia, "issue" é cada item do Jira (tarefa, épico, subtarefa...).
+- O **Claude Code** (ou o Codex).
+- **Python 3.9 ou superior.** Os comandos do plugin são programas em Python.
+  Corre `python3 --version` no terminal: tem de aparecer 3.9 ou mais. Se não
+  existir ou for mais antigo, instala o Python
+  (https://www.python.org/downloads/). Não é preciso instalar mais nada.
 
-- Credenciais Redmine (uma vez, nunca partilhes esta chave):
-  ```bash
-  mkdir -p ~/.config/redmine-sync
-  printf '%s\n' 'A-TUA-CHAVE-API' > ~/.config/redmine-sync/credentials
-  chmod 600 ~/.config/redmine-sync/credentials
-  ```
-  (chave em *My account → API access key* no teu Redmine)
-- Copia o template incluído no zip e preenche os campos marcados
-  `PREENCHE:` (deixa `issue_key` como está):
-  ```bash
-  cd ~/auto-task-manager
-  cp redmine.example.json .redmine.json
-  ```
-  Depois abre `.redmine.json` num editor de texto e substitui cada
-  `PREENCHE: ...` pelo valor real - `url` é o endereço do teu Redmine,
-  `project` é o identificador do projeto (não o nome; está no URL
-  `.../projects/<identificador>/...`), `text_format` é `markdown` ou
-  `textile` conforme o teu Redmine (pergunta a quem administra a
-  instância se não souberes).
-  - O bloco `required_fields_on_close` no fim do template é só um exemplo
-    com um campo fictício (`reviewed`). **Se o teu Redmine não obriga a
-    preencher nenhum campo personalizado ao fechar uma issue, apaga esse
-    bloco** (e a vírgula no fim da linha `issue_key` mesmo acima, senão o
-    JSON fica inválido) - com ele lá, o CLI passa a exigir um campo que o
-    teu Redmine não tem. Se o teu Redmine obriga, substitui-o pelo campo
-    real (`id`, `key`, `name` e `values` - ver o README).
+## 1. Preparar (5 minutos)
 
-## Configurar o Jira
+**a) Extrair o zip** na tua pasta pessoal:
 
-São dois ficheiros: as **credenciais** (fora do repositório, só tuas) e o
-**`.jira.json`** (na pasta de trabalho). A referência completa de cada chave
-está no [README](README.md#jira).
+```bash
+unzip auto-task-manager-*.zip -d ~/
+```
 
-- Cria um token em https://id.atlassian.com/manage-profile/security/api-tokens
-  e guarda-o (uma vez, nunca o partilhes):
-  ```bash
-  mkdir -p ~/.config/jira-sync
-  printf '%s\n' 'JIRA_EMAIL=O-TEU-EMAIL' 'JIRA_API_TOKEN=O-TEU-TOKEN' > ~/.config/jira-sync/credentials
-  chmod 600 ~/.config/jira-sync/credentials
-  ```
-  (em alternativa, exporta `JIRA_EMAIL` e `JIRA_API_TOKEN`). O email é o da
-  tua conta Atlassian. Um valor que ainda comece por `PREENCHE:` é o template
-  por preencher e o CLI recusa-o.
-- Copia o template e preenche os campos marcados `PREENCHE:`:
-  ```bash
-  cd ~/auto-task-manager
-  cp jira.example.json .jira.json
-  ```
-  - `url`: o endereço do teu Jira Cloud, `https://<site>.atlassian.net`
-    (sem barra final).
-  - `project`: a chave do projeto, o prefixo das issues (`PROJ` em
-    `PROJ-123`).
-  - `updates_dir`: já vem preenchido; normalmente não mudas.
-  - `story_points_field`: opcional. Se souberes o id do campo dos story
-    points (por exemplo `customfield_10016`) põe-no; senão **apaga essa
-    linha** (e a vírgula no fim da linha anterior) e o CLI procura o campo
-    pelo nome. Deixar o `PREENCHE:` lá dá erro "not filled in".
-- Este plugin só suporta **Jira Cloud** (`*.atlassian.net`), não Data Center
-  nem Server.
+**b) Criar um token do Jira** em
+https://id.atlassian.com/manage-profile/security/api-tokens e guardá-lo (só
+tu o deves ver; **nunca o coles numa conversa**):
 
-## Via Claude Code
+```bash
+mkdir -p ~/.config/jira-sync
+printf '%s\n' 'JIRA_EMAIL=O-TEU-EMAIL' 'JIRA_API_TOKEN=O-TEU-TOKEN' > ~/.config/jira-sync/credentials
+chmod 600 ~/.config/jira-sync/credentials
+```
 
-- A partir de dentro de `~/auto-task-manager` (onde puseste o `.redmine.json`
-  ou o `.jira.json`), abre uma sessão apontando o plugin para essa mesma
-  pasta:
-  ```bash
-  cd ~/auto-task-manager
-  claude --plugin-dir ~/auto-task-manager
-  ```
-- Confirma que carregou: pede *"verifica se o comando redmine-sync (ou
-  jira-sync) está disponível"*.
-- Testa: *"mostra o estado do issue X"* (read-only), depois *"fecha esta
-  sessão de trabalho..."* ou *"cria uma feature no Redmine/Jira chamada..."*.
+O email é o da tua conta Atlassian.
 
-## Via Codex
+**c) Criar a pasta do teste e o ficheiro `.jira.json`:**
 
-- Põe o `bin/` no PATH (o Codex não faz isto automaticamente, ao
-  contrário do Claude Code):
-  ```bash
-  export PATH="$PATH:$HOME/auto-task-manager/bin"
-  redmine-sync --version   # confirma que encontra o comando
-  jira-sync --version      # idem, para o Jira (deve dizer 0.4.0)
-  ```
-- O Codex descobre as skills em `.agents/skills/` a partir da pasta
-  atual, da pasta acima, ou da raiz do repositório onde estiveres a
-  trabalhar. Como já puseste o `.redmine.json`/`.jira.json` dentro de
-  `~/auto-task-manager`, basta correres o Codex a partir de lá:
-  ```bash
-  cd ~/auto-task-manager
-  codex
-  ```
-  Se preferires testar a partir de outro repositório, copia ou symlinka
-  a pasta `.agents/skills/` desse zip para dentro do teu próprio
-  repositório, e move o `.redmine.json`/`.jira.json` para lá também.
-- Lê `AGENTS.md` (na raiz do zip) para mais detalhes.
-- Testa da mesma forma: pede primeiro algo read-only, depois experimenta
-  pedir para fechar uma sessão ou criar um issue.
+```bash
+mkdir ~/teste-jira && cd ~/teste-jira
+cp ~/auto-task-manager/jira.example.json .jira.json
+```
 
-## Checklist do Jira (jira-session-close e jira-backlog)
+Abre o `.jira.json` num editor de texto e preenche só duas coisas, apagando o
+texto `PREENCHE: ...`:
 
-O suporte a Jira foi testado contra uma simulação da API e contra **um** Jira
-Cloud de teste (criar issues, pais, story points, links, uma transição e as
-repetições). Ainda não foi visto num site real: transições com campos
-obrigatórios (por exemplo `Resolution`), `fix-parents`,
-`update-descriptions`, links `relates`/`duplicates`, prioridades. A primeira
-utilização no teu Jira deve por isso ser **acompanhada**, passo a passo, com
-confirmação na interface do Jira. Pára e reporta se algo não bater certo.
+- `url`: o endereço do teu Jira, por exemplo `https://empresa.atlassian.net`
+  (sem `/` no fim);
+- `project`: a chave do projeto, o prefixo das issues (`PROJ` em `PROJ-123`).
 
-0. **Antes de tudo**, com o `bin/` no PATH (como acima): `jira-sync
-   --version` e `jira-backlog --version` devem dizer `0.4.0`.
-1. **Só leitura:** `jira-sync status PROJ-1` (uma issue que exista no teu
-   projeto). Deve mostrar estado, story points e as transições disponíveis.
-2. **Plano de teste com 3 nós** (um Epic, uma tarefa debaixo dele, uma
-   subtarefa debaixo da tarefa, e uma relação `blocks`). Parte do modelo
-   incluído:
-   ```bash
-   mkdir -p jira
-   cp jira.plan.example.json jira/plano-teste.json
-   ```
-   Abre `jira/plano-teste.json` e muda `project` para a tua chave. **Os nomes
-   dos tipos de issue variam de projeto para projeto** (o modelo usa `Epic`,
-   `Task` e `Subtask`; o teu pode ter `Story`, `Sub-task`, ou nomes na tua
-   língua). Não precisas de os adivinhar: corre `jira-backlog plan
-   jira/plano-teste.json` e, se um nome não existir, o erro lista os tipos
-   do projeto. Um filho tem de estar exatamente um nível abaixo do pai (Epic
-   > Task/Story > Subtask) e uma subtarefa precisa de pai.
-3. Pede à skill `jira-backlog` para validar (`jira-backlog plan <ficheiro>`) e
-   para simular (`jira-backlog apply <ficheiro>`, sem `--write`). Nada deve
-   ser criado nesta fase.
-4. Só depois de leres a simulação, aprova a escrita (`jira-backlog apply
-   <ficheiro> --write`) e **confirma na interface do Jira**: os tipos de
-   issue, os pais, os story points e o **sentido** do link `blocks` (deve
-   ser "A bloqueia B" para `from` A, `to` B). Corre de novo **logo a seguir**
-   o mesmo `jira-backlog apply <ficheiro> --write`: não deve criar nada.
-5. **Fecho de sessão:** parte do modelo `jira.update.example.json`:
-   ```bash
-   mkdir -p jira/session-updates
-   cp jira.update.example.json jira/session-updates/2026-01-15-teste-jira.json
-   ```
-   Muda `issue` para uma issue de teste tua e `status` para o **nome do
-   estado de destino como aparece no teu workflow** (pode estar na tua língua,
-   por exemplo `Concluído`). Pede à skill `jira-session-close` para simular,
-   aprova e escreve. Confirma no Jira o comentário (termina em
-   `_jira-sync: <sessão>_`), o estado e os story points. Se a transição
-   exigir campos (por exemplo `Resolution`), a simulação diz quais faltam e
-   que valores aceita: preenche-os em `transition_fields` (só texto, número e
-   opção única são suportados; outros tipos têm de ser preenchidos no Jira).
-6. **Repetir** o mesmo `jira-sync apply <ficheiro> --write`: a issue deve ser
-   dada como já feita e ignorada, sem segundo comentário.
-7. As issues de teste ficam no Jira: apaga-as no fim.
+Na linha `story_points_field`: apaga-a (e a vírgula no fim da linha de cima),
+a não ser que saibas o número do campo dos story points.
 
-## O que reportar
+> **Onde fica o `.jira.json`?** Na **pasta raiz do projeto** em que vais
+> trabalhar, a pasta onde abres o Claude Code. Cada projeto tem o seu.
+> Não o ponhas numa pasta "de cima" (como a tua pasta pessoal): aplicava-se a
+> todos os projetos que estão por baixo. E não ponhas `.jira.json` e
+> `.redmine.json` na mesma pasta: as skills param e perguntam qual usar.
+> Aqui, `~/teste-jira` faz de projeto de teste.
 
-- A versão (`jira-sync --version`) e se o comando/skill foi encontrado ou
-  não (e onde tiveste de o pôr).
-- O texto exato de qualquer erro.
-- Se o dry-run apareceu sempre antes de qualquer escrita.
-- No Jira: o que a checklist acima mostrou na interface (tipos, pais, story
-  points, sentido do `blocks`), os nomes dos tipos de issue e dos estados do
-  teu projeto, se o projeto é gerido pela empresa ou pela equipa
-  (*company-managed* / *team-managed*), e se alguma transição exigiu campos.
-- Qualquer coisa que pareça específica do Claude Code e não faça sentido
-  no Codex (ou vice-versa) — é exatamente o tipo de detalhe que este
-  teste quer apanhar.
+## 2. Experimentar
+
+Abre o Claude Code **dentro da pasta do teste**, a apontar para o plugin:
+
+```bash
+cd ~/teste-jira
+claude --plugin-dir ~/auto-task-manager
+```
+
+Escreve ao Claude, **por esta ordem**, e verifica cada resultado no Jira:
+
+1. *"Mostra o estado da issue PROJ-1"* (uma issue que exista). Deve dizer o
+   estado, os story points e para que estados pode passar.
+2. *"Quero criar no Jira um épico, uma tarefa dentro dele e uma subtarefa,
+   com a tarefa a bloquear a subtarefa. Mostra-me só a simulação."* Deve listar
+   o que **seria** criado e não criar nada. Se os tipos de issue do teu projeto
+   tiverem outros nomes (por exemplo "História"), o Claude diz-te quais
+   existem: usa esses.
+3. *"Cria-os."* Depois de leres a simulação. Verifica no Jira os tipos, quem é
+   filho de quem e que **a tarefa bloqueia a subtarefa** (e não o contrário).
+   Pede a seguir *"cria-os outra vez"*: não deve criar nada de novo.
+4. *"Fecha esta sessão: passa a tarefa para o estado final e põe 3 story
+   points."* Lê a simulação e aprova. Verifica no Jira o estado, os story
+   points e o comentário (acaba em `_jira-sync: ..._`). Se o Jira exigir um
+   campo para fechar (por exemplo `Resolution`), o Claude pergunta-te o valor.
+5. Repete o pedido do passo 4: deve dizer que **já está feito**, sem segundo
+   comentário.
+6. **Apaga as issues de teste** no Jira.
+
+## Se algo correr mal
+
+| Mensagem | O que fazer |
+|---|---|
+| `... is not filled in` | Ainda ficou um `PREENCHE: ...` no `.jira.json` ou nas credenciais. |
+| `the API token was rejected` | Email ou token errados: confirma o email da tua conta Atlassian ou cria outro token. |
+| `project ... does not exist or is not visible to you` | A chave do projeto está errada, ou a tua conta não tem acesso a ele. Confirma a chave no endereço de uma issue (`PROJ` em `PROJ-123`). |
+| `no .jira.json found` | Não estás na pasta do projeto: faz `cd ~/teste-jira` antes de abrir o Claude Code. |
+| `type '...' does not exist ...; available: ...` | O projeto chama outra coisa a esse tipo de issue: usa um dos nomes listados. |
+
+Se algo não bater certo, para e diz-me.
+
+## O que me enviar
+
+- O texto **exato** de qualquer erro.
+- Se a simulação apareceu sempre antes de qualquer escrita.
+- No Jira: o que viste (tipos, quem é filho de quem, story points, o sentido do
+  "bloqueia"), os nomes dos tipos de issue e dos estados do teu projeto, e, se
+  souberes, se o projeto é *company-managed* ou *team-managed*.
+- Se algum estado exigiu campos para fechar.
+- Qualquer coisa que tenha sido confusa.
+
+---
+
+## Mais detalhes (opcional)
+
+**Codex em vez do Claude Code.** O Codex não põe os comandos no PATH sozinho:
+
+```bash
+export PATH="$PATH:$HOME/auto-task-manager/bin"
+jira-sync --version      # deve dizer 0.4.0
+```
+
+E precisa das skills na pasta do projeto: copia ou faz um link de
+`~/auto-task-manager/.agents/skills` para `~/teste-jira/.agents/skills`, e corre
+`codex` a partir de `~/teste-jira`. Mais detalhes em `AGENTS.md`.
+
+**Usar os comandos à mão** (em vez de pedir ao Claude), depois do `export`
+acima e dentro de `~/teste-jira`:
+
+```bash
+jira-sync status PROJ-1                              # só leitura
+cp ~/auto-task-manager/jira.plan.example.json plano.json   # editar project e tipos
+jira-backlog plan plano.json                         # valida
+jira-backlog apply plano.json                        # simulação
+jira-backlog apply plano.json --write                # cria
+```
+
+O modelo de fecho de sessão é `jira.update.example.json`
+(`jira-sync apply ficheiro.json` simula; `--write` escreve).
+
+**Redmine em vez de Jira.** O mesmo, com `redmine.example.json` copiado para
+`.redmine.json` na raiz do projeto, e a chave API (*My account → API access
+key*) em `~/.config/redmine-sync/credentials` (modo 600, só a chave numa
+linha). Preenche `url`, `project` e `text_format`, e **apaga o bloco
+`required_fields_on_close`** (e a vírgula na linha de cima) se o teu Redmine não
+exige campos ao fechar uma issue.
+
+**Documentação completa:** `README.md` (cada opção do `.jira.json`, formatos
+dos ficheiros, limitações).

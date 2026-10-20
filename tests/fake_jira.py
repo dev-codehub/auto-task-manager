@@ -25,6 +25,10 @@ non-number for a field whose schema is number, and an issue link whose
 ``type``, ``inwardIssue`` or ``outwardIssue`` is not ``{"name"}`` /
 ``{"key"}``.
 
+Credentials it does not recognise are an anonymous user, like on a real site:
+``GET /myself`` and every write answer 401, but a project or issue read
+(``/project/KEY``, ``/issue/...``) answers 404.
+
 Every call is logged in ``requests``; every mutating call is also logged in
 ``writes`` as (method, path, body). ``POST /search/jql`` is a read, so it is
 in ``requests`` only.
@@ -387,7 +391,17 @@ def _handler_for(fake: FakeJira):
             expected = "Basic " + base64.b64encode(
                 f"{fake.email}:{fake.token}".encode("utf-8")).decode("ascii")
             if fake.last_authorization != expected:
-                self._send(401)
+                # Real Jira treats credentials it does not recognise as an
+                # anonymous user: /myself answers 401, but a project or an
+                # issue the anonymous user cannot see answers 404.
+                if method == "GET" and (path.startswith(f"{API}/project/")
+                                        or path.startswith(f"{API}/issue/")):
+                    self._send(404, {"errorMessages": [
+                        "Issue does not exist or you do not have permission to see it."
+                        if "/issue/" in path else "No project could be found."],
+                        "errors": {}})
+                else:
+                    self._send(401)
                 return False
             if fake.answer_html:
                 data = b"<html><body>Sign in</body></html>"

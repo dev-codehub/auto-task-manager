@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- A wrong email or token is now reported as such; before, `jira-sync` and
+  `jira-backlog` said the project did not exist, because Jira answers 404 to
+  unrecognised credentials on everything except `/myself`.
+
+### Changed
+- `TESTING.md` rewritten for testers: a short path (prepare, try six things in
+  order, what to send back) with the technical detail moved to the end, and the
+  test run in its own project folder instead of inside the plugin folder.
+- README and AGENTS.md say where `.redmine.json` and `.jira.json` go: the root
+  of each project, one per project, never in a folder above several projects and
+  never both in the same folder.
+- The Python requirement is explained in plain words.
+
 ## 0.4.0
 
 Jira Cloud support, next to Redmine, in the same plugin.

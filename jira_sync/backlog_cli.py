@@ -62,6 +62,10 @@ def main(argv: Optional[List[str]] = None, environ: Optional[Mapping[str, str]] 
             raise ConfigError(f"{path}: project '{file.project}' does not match "
                               f"'{config.project}' in {config.path}")
         client = Client(config.url, email, token)
+        # Ask who we are first: Jira answers 404, not 401, to credentials it
+        # does not recognise on everything except /myself, so a wrong email or
+        # token would otherwise look like a missing project.
+        client.myself()
         try:
             client.get_project(config.project)
         except NotFoundError:

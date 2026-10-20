@@ -43,6 +43,10 @@ def main(argv: Optional[List[str]] = None, environ: Optional[Mapping[str, str]] 
         config = load_config(args.config or find_config(here))
         email, token = load_credentials(environ, credentials_path)
         client = Client(config.url, email, token)
+        # Ask who we are first: Jira answers 404, not 401, to credentials it
+        # does not recognise on everything except /myself, so a wrong email or
+        # token would otherwise look like a missing project.
+        client.myself()
         try:
             client.get_project(config.project)
         except NotFoundError:

@@ -87,6 +87,25 @@ so a typo is caught before the write rather than as a live rejection.
 issues by subject prefix (see below), so it refuses to run at all in a
 repository configured with `issue_key: "id_only"`.
 
+### Where `.redmine.json` and `.jira.json` go
+
+Put the file in the **root of the project you work on**: the folder you open
+Claude Code or Codex in, normally the one holding `.git`. One file per project.
+
+- The tools look in the current folder, then in each parent folder, and use the
+  **first one they find**. A file in a folder above your projects (your home
+  folder, `~/Documents`) would therefore apply to every project below it: do
+  not put it there.
+- Several projects, or several trackers: give each project folder its own file,
+  with that project's `url` and `project`. For a monorepo with several Jira or
+  Redmine projects, put one file in each subfolder and work from inside it; the
+  nearest file wins over one further up.
+- Never put `.redmine.json` and `.jira.json` in the same folder (or have one
+  above the other): the skills then stop and ask which tracker you mean.
+- The file holds no secret (a URL and a project key), so it is safe to commit.
+  Credentials live outside the repository, once per person.
+- `--config path/to/file` makes a CLI use a specific file instead of searching.
+
 ## Commands: redmine-sync (session close)
 
 ```bash
@@ -326,18 +345,34 @@ The plan file has the same shape as Redmine's, with Jira's vocabulary:
 ### How far this has been verified
 
 Jira support was developed against an in-memory fake of the API
-(`tests/fake_jira.py`) and then run against one Jira Cloud test site. Confirmed
-on that site: reading issues; creating an Epic, a Task and a Subtask with their
-parents and story points; links (`from` blocks `to`, which the live run
-corrected); a status transition together with story points and the marker
-comment; and re-running both CLIs, which created and wrote nothing the second
-time.
+(`tests/fake_jira.py`) and then run against one Jira Cloud test site (issue
+types Epic, Task and Subtask; a priority field with default Medium; a workflow
+with the global transitions Backlog, In-progress, QA and Concluído, none of
+them requiring fields). Confirmed on that site:
+
+- creating an Epic, a Task and a Subtask with their parents, including an
+  existing parent referenced as `#KEY`; priority; story points;
+- all three link types (`blocks`, `relates`, `duplicates`), in the right
+  orientation;
+- descriptions as ADF (heading, ordered list, link, inline code, code block,
+  bold);
+- `update-descriptions` (dry run, `--write` requires `--only`, write);
+- `fix-parents` (it reported a wrong parent, `--write` fixed it, and a repeat
+  reported all correct);
+- a session close of 3 rows with transitions forward and back (Backlog to
+  In-progress and QA, Concluído back to In-progress) plus story points;
+- re-running both CLIs straight away, which did nothing;
+- the dry run catching an unknown type, a Subtask without a parent, a
+  self-link, an unreachable status, `transition_fields` without a status, a
+  missing issue, negative story points, a bad `url` and an unfilled
+  `PREENCHE:` value.
 
 Not yet seen on a live site: a transition that requires fields (for example
-`Resolution`), `fix-parents`, `update-descriptions`, `relates` and `duplicates`
-links, priorities, and team-managed versus company-managed differences. Treat
-your first run on your own site as supervised: start read-only and check the
-result in the Jira UI. [TESTING.md](TESTING.md) has a checklist.
+`Resolution`), clearing a field with `null`, team-managed versus
+company-managed differences, workflows with required fields, and Jira's error
+bodies beyond the cases above. Treat your first run on your own site as
+supervised: start read-only and check the result in the Jira UI.
+[TESTING.md](TESTING.md) has a checklist.
 
 ### Troubleshooting
 
@@ -346,7 +381,7 @@ result in the Jira UI. [TESTING.md](TESTING.md) has a checklist.
 | `is not filled in` | A `PREENCHE:` placeholder is still in `.jira.json` or in the credentials; replace it. |
 | `no Jira credentials` / `is readable by other users` | Set `JIRA_EMAIL` and `JIRA_API_TOKEN`, or create the credentials file and `chmod 600` it (see Jira credentials). |
 | `is not a site address` / `is plain http` | Fix `url` in `.jira.json`: `https://<site>.atlassian.net`. |
-| `the API token was rejected` | Wrong email or token, a revoked token, or an email that does not match the token: create a new token. |
+| `the API token was rejected` | Wrong email or token, a revoked token, or an email that does not match the token (a wrong email shows it too): create a new token. |
 | `type '...' does not exist in '...'; available: ...` | Use one of the listed type names. |
 | `transition '...' requires '...'` / `field not supported, set it in Jira` | The transition needs a field: add it to `transition_fields` (the message lists the accepted options), or set it in Jira if its type is unsupported. |
 | `no field named ... on this site` / `several story points fields` | Set `story_points_field` in `.jira.json` to the field's `customfield_` id. |
