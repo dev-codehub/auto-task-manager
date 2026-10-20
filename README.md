@@ -87,6 +87,25 @@ so a typo is caught before the write rather than as a live rejection.
 issues by subject prefix (see below), so it refuses to run at all in a
 repository configured with `issue_key: "id_only"`.
 
+### Where `.redmine.json` and `.jira.json` go
+
+Put the file in the **root of the project you work on**: the folder you open
+Claude Code or Codex in, normally the one holding `.git`. One file per project.
+
+- The tools look in the current folder, then in each parent folder, and use the
+  **first one they find**. A file in a folder above your projects (your home
+  folder, `~/Documents`) would therefore apply to every project below it: do
+  not put it there.
+- Several projects, or several trackers: give each project folder its own file,
+  with that project's `url` and `project`. For a monorepo with several Jira or
+  Redmine projects, put one file in each subfolder and work from inside it; the
+  nearest file wins over one further up.
+- Never put `.redmine.json` and `.jira.json` in the same folder (or have one
+  above the other): the skills then stop and ask which tracker you mean.
+- The file holds no secret (a URL and a project key), so it is safe to commit.
+  Credentials live outside the repository, once per person.
+- `--config path/to/file` makes a CLI use a specific file instead of searching.
+
 ## Commands: redmine-sync (session close)
 
 ```bash
