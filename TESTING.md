@@ -80,11 +80,67 @@ Este guia é para quem recebeu o `.zip` diretamente, sem passar pelo
 - Testa da mesma forma: pede primeiro algo read-only, depois experimenta
   pedir para fechar uma sessão ou criar um issue.
 
+## Testar as skills do Jira (jira-session-close e jira-backlog)
+
+O suporte a Jira foi testado contra uma simulação em memória da API, não
+contra um Jira real. A primeira utilização num Jira Cloud verdadeiro deve por
+isso ser **acompanhada**, passo a passo, com confirmação na interface do Jira.
+
+- Cria um token em https://id.atlassian.com/manage-profile/security/api-tokens
+  e guarda-o (uma vez, nunca o partilhes):
+  ```bash
+  mkdir -p ~/.config/jira-sync
+  printf '%s\n' 'JIRA_EMAIL=O-TEU-EMAIL' 'JIRA_API_TOKEN=O-TEU-TOKEN' > ~/.config/jira-sync/credentials
+  chmod 600 ~/.config/jira-sync/credentials
+  ```
+  (em alternativa, exporta `JIRA_EMAIL` e `JIRA_API_TOKEN`). Um valor que
+  ainda comece por `PREENCHE:` é o template por preencher e o CLI recusa-o.
+- Copia o template e preenche os campos marcados `PREENCHE:`:
+  ```bash
+  cd ~/auto-task-manager
+  cp jira.example.json .jira.json
+  ```
+  `url` é o endereço do teu Jira Cloud (sem barra final), `project` é a
+  chave do projeto (o prefixo das issues, `PROJ` em `PROJ-123`).
+  `story_points_field` é opcional: se souberes o id do campo (por exemplo
+  `customfield_10016`) põe-no; senão **apaga essa linha** (e a vírgula no
+  fim da linha anterior) e o CLI procura o campo pelo nome. Deixar o
+  `PREENCHE:` lá dá erro "not filled in".
+- Confirma que o comando existe: `jira-sync --version` e
+  `jira-backlog --version` (com o `bin/` no PATH, como acima).
+- Se a pasta tiver `.redmine.json` e `.jira.json` ao mesmo tempo, as skills
+  param e perguntam qual dos dois queres usar. Para testar o Jira, usa uma
+  pasta só com o `.jira.json`.
+
+Checklist da primeira utilização (pára e reporta se algo não bater certo):
+
+1. **Só leitura:** `jira-sync status PROJ-1` (uma issue que exista). Deve
+   mostrar estado, story points e as transições disponíveis.
+2. **Plano de teste com 3 nós** (um Epic, uma Story debaixo dele, uma
+   Sub-task debaixo da story, mais uma relação `blocks` entre dois deles,
+   ou entre um deles e uma issue existente `#PROJ-1`). Pede à skill
+   `jira-backlog` para o validar (`jira-backlog plan <ficheiro>`) e depois
+   para o simular (`jira-backlog apply <ficheiro>`, sem `--write`). Nada
+   deve ser criado nesta fase.
+3. Só depois de leres a simulação, aprova a escrita
+   (`jira-backlog apply <ficheiro> --write`) e **confirma na interface do
+   Jira**: os tipos de issue, os pais (Epic > Story > Sub-task), os story
+   points e o **sentido** do link `blocks` (quem bloqueia quem; deve ser
+   "A bloqueia B" para `from` A, `to` B).
+4. **Fecho de sessão:** com a skill `jira-session-close`, faz uma única linha
+   que passe uma story para `Done` com `story_points`, simula, aprova e
+   escreve. Confirma no Jira o comentário (termina em
+   `_jira-sync: <sessão>_`), o estado e os story points.
+5. **Repetir** o mesmo `jira-sync apply <ficheiro> --write`: a issue deve ser
+   dada como já feita e ignorada, sem segundo comentário.
+
 ## O que reportar
 
 - Se o comando/skill foi encontrado ou não (e onde tiveste de o pôr).
 - O texto exato de qualquer erro.
 - Se o dry-run apareceu sempre antes de qualquer escrita.
+- No Jira: o que a checklist acima mostrou na interface (tipos, pais, story
+  points, sentido do `blocks`) e o texto exato de qualquer erro do CLI.
 - Qualquer coisa que pareça específica do Claude Code e não faça sentido
   no Codex (ou vice-versa) — é exatamente o tipo de detalhe que este
   teste quer apanhar.

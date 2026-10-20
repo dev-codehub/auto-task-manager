@@ -1,7 +1,7 @@
-# redmine-sync
+# auto-task-manager (redmine-sync, jira-sync)
 
-Redmine task management from Claude Code: two skills, both dry-run first,
-written only after you say yes.
+Redmine and Jira Cloud task management from Claude Code: two skills for each
+tracker, all dry-run first, written only after you say yes.
 
 **`redmine-session-close`** — at the end of a working session, writes one
 update per issue the session touched: a comment, and optionally `% Done` and
@@ -11,8 +11,17 @@ status.
 plan file, relates issues to each other, repairs parents, and updates
 descriptions on request.
 
-Every write, in either skill, is read back, because Redmine can accept a
-change and silently ignore a field your role may not set.
+**`jira-session-close`** and **`jira-backlog`** — the same two jobs for Jira
+Cloud (see [Jira](#jira)): one comment per issue the session touched plus an
+optional status move and story points, and epics, stories and sub-tasks
+created from a plan file.
+
+Every write, in any of the skills, is read back, because the tracker can
+accept a change and silently ignore a field your role may not set.
+
+Which tracker a skill uses is decided by the repository: `.redmine.json` for
+the Redmine skills, `.jira.json` for the Jira skills. If a repository has both,
+the skills stop and ask which tracker you mean.
 
 ## Setup
 
@@ -153,11 +162,152 @@ redmine-backlog update-descriptions <file> --only=ID,ID --write   # apply
 `apply`, it has no other safety net once it writes, so there is no default of
 "every node in the file."
 
+## Jira
+
+The Jira skills are `jira-session-close` (CLI `jira-sync`) and `jira-backlog`
+(CLI `jira-backlog`). They target Jira Cloud (REST API v3), authenticate with
+your Atlassian account email and an API token, and work like their Redmine
+counterparts: dry run first, `--write` only after your yes, every write read
+back.
+
+### Jira credentials
+
+Once per person. Create an API token at
+https://id.atlassian.com/manage-profile/security/api-tokens, then either export
+`JIRA_EMAIL` and `JIRA_API_TOKEN`, or put both as `KEY=VALUE` lines in a file
+only you can read:
+
+```bash
+mkdir -p ~/.config/jira-sync
+printf '%s\n' 'JIRA_EMAIL=you@example.com' 'JIRA_API_TOKEN=YOUR-API-TOKEN' > ~/.config/jira-sync/credentials
+chmod 600 ~/.config/jira-sync/credentials
+```
+
+The CLI refuses to read that file if others can read it. A value that still
+starts with `PREENCHE:` is the unfilled template and is reported as "not
+filled in", never sent. Skills never read this file or ask for its contents.
+
+### `.jira.json`
+
+Commit one at the repository root (`jira.example.json` is a template with
+`PREENCHE:` placeholders):
+
+```json
+{
+  "url": "https://your-site.atlassian.net",
+  "project": "PROJ",
+  "updates_dir": "jira/session-updates",
+  "story_points_field": "customfield_10016"
+}
+```
+
+`url` is your Jira Cloud site (https; no trailing slash needed) and `project`
+is the project key, the prefix of its issues (`PROJ` in `PROJ-123`).
+`updates_dir` is where session-close files go and is optional.
+`story_points_field` is optional: the id of the story points field, in the form
+`customfield_` plus digits. Without it the field is looked up by exact name
+(`Story Points` or `Story point estimate`); if the site has none, or several,
+anything that sets story points reports it and asks you to configure the id.
+
+### Commands: jira-sync (session close)
+
+```bash
+jira-sync status SCRUM-12 SCRUM-13             # read-only
+jira-sync apply jira/session-updates/2026-10-06-onboarding-flow.json          # dry run
+jira-sync apply jira/session-updates/2026-10-06-onboarding-flow.json --write  # write
+```
+
+`status` prints each issue's status, story points and the transitions
+available from where it stands. Re-running `--write` is safe: each comment ends
+with a `_jira-sync: <session>_` line, and issues that already have it are
+skipped, so an interrupted run resumes where it stopped. Name the session
+`YYYY-MM-DD-<topic>`, as for Redmine.
+
+An update file:
+
+```json
+{"session": "2026-10-06-onboarding-flow", "updates": [
+  {"issue": "SCRUM-12", "note": "...", "status": "Done", "story_points": 3,
+   "transition_fields": {"Resolution": "Done"}}
+]}
+```
+
+- `issue` (required): a Jira issue key.
+- `note` (required): the comment.
+- `status` (optional): the target status *name*, as Jira shows it. The tool
+  finds the transition that leads there; if there is none it reports an error
+  listing the statuses reachable from where the issue is now.
+- `story_points` (optional): a number of 0 or more. Jira has no `% Done`;
+  story points take its place, and they change only when given - an issue's
+  points are never inferred or touched otherwise.
+- `transition_fields` (optional): values for fields the chosen transition asks
+  for, keyed by the field's name as Jira shows it. A missing required field is
+  an error naming it (and the accepted options, where the field has a fixed
+  list) - on the dry run, before anything is sent. Supported types are text,
+  number and single-option fields; a field of any other type (user,
+  multi-select, version, rich text and the like) is reported as unsupported
+  and must be set in Jira.
+
+### Commands: jira-backlog (create, link, repair)
+
+```bash
+jira-backlog plan <file>                            # read-only, validate
+jira-backlog apply <file>                            # dry run
+jira-backlog apply <file> --write                     # create
+jira-backlog fix-parents <file>                        # report only
+jira-backlog fix-parents <file> --write                 # fix
+jira-backlog update-descriptions <file> --only=ID,ID          # dry run
+jira-backlog update-descriptions <file> --only=ID,ID --write   # apply
+```
+
+The plan file has the same shape as Redmine's, with Jira's vocabulary:
+
+```json
+{
+  "project": "PROJ",
+  "nodes": [
+    {"id": "EP-01", "subject": "EP-01 An epic", "description": "...",
+     "type": "Epic", "parent": null},
+    {"id": "US-01", "subject": "US-01 A story", "description": "...",
+     "type": "Story", "priority": "Medium", "story_points": 5,
+     "parent": "EP-01"},
+    {"id": "US-01.1", "subject": "US-01.1 A sub-task", "description": "...",
+     "type": "Sub-task", "parent": "US-01"}
+  ],
+  "relations": [
+    {"type": "blocks", "from": "US-01.1", "to": "#PROJ-42"}
+  ]
+}
+```
+
+- A node's `id` is never sent to Jira; it is matched against existing issues by
+  requiring the summary (`subject`) to start with it, so a plan re-applied later
+  skips what it already created. `type` is an issue type that exists in the
+  project. `priority` and `story_points` are optional - left out, the project's
+  default priority applies and no points are set.
+- `parent` and a relation's `from`/`to` are another node's `id` in the same
+  file, or `#PROJ-123` (the `#` and the key) for an issue that already exists.
+- A relation `type` is `relates`, `duplicates` or `blocks`. Jira has no
+  `precedes`; a plan that uses it is rejected.
+- Descriptions are written and read back only to check that one is present, not
+  compared character by character; the report says so. `update-descriptions
+  --write` refuses to run without `--only`, as in Redmine.
+- `fix-parents --write` exits 1 when a fix did not land (usually the account may
+  not change that issue's parent), unlike its Redmine counterpart.
+
+### How far this has been verified
+
+Jira support was developed and tested against an in-memory fake of the Jira
+API (`tests/fake_jira.py`), not a live site. Treat your first run against a real
+Jira Cloud site as supervised: start read-only and check the result in the Jira
+UI. [TESTING.md](TESTING.md) has a checklist.
+
 ## What it will not do
 
-Change assignees, custom fields or time entries. Neither skill ever edits a
-description as a side effect of something else — `redmine-sync` only ever
-posts a comment, and `redmine-backlog` only touches a description when asked
+Change assignees, custom fields or time entries (apart from the Jira story
+points and transition fields described above). None of the skills ever edits a
+description as a side effect of something else — the session-close CLIs only
+ever post a comment, and the backlog CLIs only touch a description when asked
 for by name with `--only`.
 
 ## Development
@@ -166,5 +316,5 @@ for by name with `--only`.
 python3 -m unittest discover -s tests -v
 ```
 
-Python 3.9+, standard library only. The tests run against an in-memory fake
-Redmine (`tests/fake_redmine.py`).
+Python 3.9+, standard library only. The tests run against in-memory fakes of
+Redmine (`tests/fake_redmine.py`) and Jira (`tests/fake_jira.py`).

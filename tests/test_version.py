@@ -4,6 +4,7 @@ import json
 import os
 import unittest
 
+import jira_sync
 import redmine_sync
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +19,10 @@ class VersionTests(unittest.TestCase):
     def test_cli_version_matches_the_plugin_version(self):
         plugin = _version_in(".claude-plugin", "plugin.json")["version"]
         self.assertEqual(redmine_sync.__version__, plugin)
+
+    def test_jira_cli_version_matches_the_plugin_version(self):
+        plugin = _version_in(".claude-plugin", "plugin.json")["version"]
+        self.assertEqual(jira_sync.__version__, plugin)
 
     def test_marketplace_version_matches_the_plugin_version(self):
         plugin = _version_in(".claude-plugin", "plugin.json")["version"]

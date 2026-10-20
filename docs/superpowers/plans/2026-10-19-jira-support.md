@@ -45,22 +45,22 @@ Each line has its test in the task named.
 
 Every test command is `python3 -m unittest tests.<module> -v`; "all tests" is `python3 -m unittest discover -s tests`.
 
-## Jira endpoints (confirm in Task 2 step 1)
+## Jira endpoints (checked against the Atlassian Jira Cloud REST v3 OpenAPI spec in Task 2)
 
-Written from memory of the v3 API. Task 2 step 1 checks each against the Atlassian docs and edits this table where it differs; later tasks follow the table as corrected.
+Task 2 step 1 checked each row against the published v3 spec (`swagger-v3.v3.json`). Rows marked "corrected" differ from what the plan first assumed; later tasks follow this table.
 
 | Need | Call |
 |---|---|
 | Current account | `GET /rest/api/3/myself` (`accountId`) |
 | Project | `GET /rest/api/3/project/{key}` |
-| Issue types of a project | `GET /rest/api/3/issue/createmeta/{key}/issuetypes` (`id`, `name`, `subtask`, `hierarchyLevel`) |
-| Create-screen fields | `GET /rest/api/3/issue/createmeta/{key}/issuetypes/{typeId}` (`fieldId`, `required`) |
-| Search | `POST /rest/api/3/search/jql` `{jql, fields, maxResults, nextPageToken}`, paged by `nextPageToken` |
-| Issue | `GET/PUT /rest/api/3/issue/{key}`, `POST /rest/api/3/issue` |
-| Comments | `GET/POST /rest/api/3/issue/{key}/comment` (ADF body, `author.accountId`) |
-| Transitions | `GET /rest/api/3/issue/{key}/transitions?expand=transitions.fields`, `POST` same path `{transition:{id}, fields}` |
+| Issue types of a project | `GET /rest/api/3/issue/createmeta/{key}/issuetypes`; corrected: the answer is a page `{startAt, maxResults, total, issueTypes: [...]}` (`startAt` default 0, `maxResults` default 50, max 200), so the client pages until `total`; each item has `id`, `name`, `subtask`, `hierarchyLevel` |
+| Create-screen fields | `GET /rest/api/3/issue/createmeta/{key}/issuetypes/{typeId}`; corrected: a page `{startAt, maxResults, total, fields: [...]}` (also paged, max 200), each item `fieldId`, `key`, `name`, `required`, `operations`, `hasDefaultValue`, `allowedValues` |
+| Search | `POST /rest/api/3/search/jql` `{jql, fields, maxResults, nextPageToken}` (confirmed); answer `{issues, nextPageToken, isLast}` - `nextPageToken` is null on the last page, so stop when it is absent; the old `/search` is not used |
+| Issue | `GET/PUT /rest/api/3/issue/{key}`, `POST /rest/api/3/issue` (answer `{id, key, self}`) |
+| Comments | `GET /rest/api/3/issue/{key}/comment` (corrected: paged, `{startAt, maxResults, total, comments: [...]}`), `POST` same path with the ADF `Comment` body, answer 201 with the comment (ADF body, `author.accountId`) |
+| Transitions | `GET /rest/api/3/issue/{key}/transitions?expand=transitions.fields` answers `{transitions: [{id, name, to, hasScreen, isAvailable, fields: {fieldId: {required, name, schema, operations, allowedValues}}}]}` (corrected: `fields` is a map keyed by field id, not a list); `POST` same path `{transition:{id}, fields}` answers 204 |
 | Fields | `GET /rest/api/3/field` |
-| Link types, links | `GET /rest/api/3/issueLinkType`, `POST /rest/api/3/issueLink`; existing links are in the issue's `issuelinks` |
+| Link types, links | `GET /rest/api/3/issueLinkType` answers `{issueLinkTypes: [{id, name, inward, outward}]}`; `POST /rest/api/3/issueLink` `{type:{name}, inwardIssue:{key}, outwardIssue:{key}}` answers 201 with no body; existing links are in the issue's `issuelinks` |
 
 Auth: HTTP Basic, `base64(email:token)`.
 
@@ -220,7 +220,7 @@ Auth: HTTP Basic, `base64(email:token)`.
   - `test_creates_parents_before_children_and_reads_back_type_parent_priority_points`.
   - `test_failure_on_the_second_node_then_rerun_creates_only_the_missing_one` (Review Focus 3): after the first run stops, the second run reports the first as skipped and creates exactly one issue.
   - `test_parent_that_did_not_land_warns_to_run_fix_parents`.
-  - `test_relation_direction_blocks`: after creating `A blocks B`, reading A back shows the link with B as outward issue. This pins the direction in the fake; Task 10 checks it on the real site.
+  - `test_relation_direction_blocks`: after creating `A blocks B`, reading A back shows the link with B as outward issue. This pins the direction in the fake; confirmed on a real Jira Cloud site, 2026-10-20 (inwardIssue is the issue that "blocks").
   - `test_description_is_verified_only_as_present_and_the_report_says_content_not_compared`; `test_empty_description_is_not_verified_and_not_an_error`.
   - `test_fix_parents_reports_then_fixes_and_flags_unconfirmed`; `test_update_descriptions_write_requires_only`.
   - Cli: `test_dry_run_creates_nothing`; `test_project_mismatch_between_plan_and_config_exits_1`; `test_plan_exit_code_is_1_when_it_has_problems`.

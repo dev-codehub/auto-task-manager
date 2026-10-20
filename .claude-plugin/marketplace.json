@@ -3,13 +3,13 @@
   "owner": {
     "name": "Leandro José"
   },
-  "description": "Redmine task management from Claude Code.",
+  "description": "Redmine and Jira Cloud task management from Claude Code.",
   "plugins": [
     {
       "name": "auto-task-manager",
       "source": "./",
-      "description": "Redmine task management from Claude Code: session-close updates (comment, % Done, status) and backlog management (create features/stories/tasks, relate issues, fix parents, update descriptions) - both dry-run first, written only after explicit approval.",
-      "version": "0.3.0"
+      "description": "Task management from Claude Code for Redmine and Jira Cloud: session-close updates (comment and status, plus % Done in Redmine or story points in Jira) and backlog management (create features/epics, stories and tasks, relate issues, fix parents, update descriptions) - both dry-run first, written only after explicit approval.",
+      "version": "0.4.0"
     }
   ]
 }
