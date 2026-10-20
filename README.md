@@ -23,7 +23,14 @@ Which tracker a skill uses is decided by the repository: `.redmine.json` for
 the Redmine skills, `.jira.json` for the Jira skills. If a repository has both,
 the skills stop and ask which tracker you mean.
 
+Jira support is for **Jira Cloud** (`https://<site>.atlassian.net`) only; Jira
+Data Center and Server are not supported. Release notes: [CHANGELOG.md](CHANGELOG.md).
+
 ## Setup
+
+Requires Python 3.9+ (standard library only, nothing to install). The plugin
+step below is shared; the credentials and per-repository file that follow it
+are the **Redmine** ones - the Jira equivalents are under [Jira](#jira).
 
 **The plugin.**
 
@@ -34,7 +41,8 @@ the skills stop and ask which tracker you mean.
 
 Or load a local copy for testing with
 `claude --plugin-dir path/to/auto-task-manager`. While it is enabled, its
-`bin/` is on the Bash tool's PATH, so `redmine-sync` runs by name.
+`bin/` is on the Bash tool's PATH, so `redmine-sync`, `redmine-backlog`,
+`jira-sync` and `jira-backlog` run by name.
 
 **Credentials**, once per person. Either export `REDMINE_API_KEY`, or store the
 key (from *My account* → *API access key* in Redmine) alone in a file:
@@ -183,14 +191,18 @@ printf '%s\n' 'JIRA_EMAIL=you@example.com' 'JIRA_API_TOKEN=YOUR-API-TOKEN' > ~/.
 chmod 600 ~/.config/jira-sync/credentials
 ```
 
-The CLI refuses to read that file if others can read it. A value that still
-starts with `PREENCHE:` is the unfilled template and is reported as "not
-filled in", never sent. Skills never read this file or ask for its contents.
+The CLI refuses to read that file if others can read it. If both
+`JIRA_EMAIL` and `JIRA_API_TOKEN` are set in the environment they are used;
+otherwise the file is. A value that still starts with `PREENCHE:` is the
+unfilled template and is reported as "not filled in", never sent. Skills never
+read this file or ask for its contents, and never print the token.
 
-### `.jira.json`
+### `.jira.json` (configuration)
 
-Commit one at the repository root (`jira.example.json` is a template with
-`PREENCHE:` placeholders):
+Commit one at the repository root. The CLIs find the nearest one by walking up
+from the current directory, or take a path with `--config path/to/.jira.json`.
+`jira.example.json` is a copy-and-fill template whose unfilled values start
+with `PREENCHE:`.
 
 ```json
 {
@@ -201,18 +213,20 @@ Commit one at the repository root (`jira.example.json` is a template with
 }
 ```
 
-`url` is your Jira Cloud site (https; no trailing slash needed) and `project`
-is the project key, the prefix of its issues (`PROJ` in `PROJ-123`).
-`updates_dir` is where session-close files go and is optional.
-`story_points_field` is optional: the id of the story points field, in the form
-`customfield_` plus digits. Without it the field is looked up by exact name
-(`Story Points` or `Story point estimate`); if the site has none, or several,
-anything that sets story points reports it and asks you to configure the id.
+| Key | Required | Default | Meaning |
+|---|---|---|---|
+| `url` | yes | - | Your Jira Cloud site root, `https://<site>.atlassian.net`. A trailing slash is ignored. It must be `https` (plain `http` is accepted only for `localhost`, for tests), and the token is only ever sent to this host: a redirect is refused. |
+| `project` | yes | - | The project key, the prefix of its issues (`PROJ` in `PROJ-123`). Also under *Project settings → Details*. |
+| `updates_dir` | no | `jira/session-updates` | Where session-update files are written. |
+| `story_points_field` | no | looked up by name | The id of the story points field, `customfield_` plus digits (usually `customfield_10016`). Without it the field is found by exact name (`Story Points` or `Story point estimate`); if the site has none, or several, anything that sets story points reports it and asks for the id. To find it: *Settings → Issues → Custom fields*, or open `https://<site>.atlassian.net/rest/api/3/field` while signed in. |
+
+Unknown keys are rejected. A `url`, `project` or `story_points_field` that still
+starts with `PREENCHE:` is reported as "not filled in".
 
 ### Commands: jira-sync (session close)
 
 ```bash
-jira-sync status SCRUM-12 SCRUM-13             # read-only
+jira-sync status PROJ-12 PROJ-13             # read-only
 jira-sync apply jira/session-updates/2026-10-06-onboarding-flow.json          # dry run
 jira-sync apply jira/session-updates/2026-10-06-onboarding-flow.json --write  # write
 ```
@@ -227,7 +241,7 @@ An update file:
 
 ```json
 {"session": "2026-10-06-onboarding-flow", "updates": [
-  {"issue": "SCRUM-12", "note": "...", "status": "Done", "story_points": 3,
+  {"issue": "PROJ-12", "note": "...", "status": "Done", "story_points": 3,
    "transition_fields": {"Resolution": "Done"}}
 ]}
 ```
@@ -247,6 +261,10 @@ An update file:
   number and single-option fields; a field of any other type (user,
   multi-select, version, rich text and the like) is reported as unsupported
   and must be set in Jira.
+
+`jira.update.example.json` is a starting point. Status names are the ones your
+workflow shows, in your site's language (for example `Concluído`), and a
+workflow may offer several transitions to different statuses from anywhere.
 
 ### Commands: jira-backlog (create, link, repair)
 
@@ -282,25 +300,57 @@ The plan file has the same shape as Redmine's, with Jira's vocabulary:
 
 - A node's `id` is never sent to Jira; it is matched against existing issues by
   requiring the summary (`subject`) to start with it, so a plan re-applied later
-  skips what it already created. `type` is an issue type that exists in the
-  project. `priority` and `story_points` are optional - left out, the project's
-  default priority applies and no points are set.
+  skips what it already created. `priority` and `story_points` are optional -
+  left out, the project's default priority applies and no points are set.
+- `type` is an issue type that exists in the project, and **type names differ
+  per project and language** (one project has `Epic`, `Task` and `Subtask`,
+  another `Story` and `Sub-task`). Run `jira-backlog plan <file>` with any name:
+  an unknown type is reported together with the types the project has. A
+  child's type must sit exactly one hierarchy level below its parent's (Epic >
+  Task/Story > Subtask), and a Subtask needs a parent; both are plan errors, found
+  before anything is created.
 - `parent` and a relation's `from`/`to` are another node's `id` in the same
   file, or `#PROJ-123` (the `#` and the key) for an issue that already exists.
-- A relation `type` is `relates`, `duplicates` or `blocks`. Jira has no
-  `precedes`; a plan that uses it is rejected.
+- A relation `type` is `relates`, `duplicates` or `blocks`; `from` blocks `to`.
+  Jira has no `precedes`; a plan that uses it is rejected. The site's own link
+  type names are used (`Blocks`, `Duplicate`, `Relates`); a site that renamed or
+  removed one gets a plan error listing the types it has.
 - Descriptions are written and read back only to check that one is present, not
   compared character by character; the report says so. `update-descriptions
   --write` refuses to run without `--only`, as in Redmine.
 - `fix-parents --write` exits 1 when a fix did not land (usually the account may
   not change that issue's parent), unlike its Redmine counterpart.
 
+`jira.plan.example.json` is a starting point for a plan file.
+
 ### How far this has been verified
 
-Jira support was developed and tested against an in-memory fake of the Jira
-API (`tests/fake_jira.py`), not a live site. Treat your first run against a real
-Jira Cloud site as supervised: start read-only and check the result in the Jira
-UI. [TESTING.md](TESTING.md) has a checklist.
+Jira support was developed against an in-memory fake of the API
+(`tests/fake_jira.py`) and then run against one Jira Cloud test site. Confirmed
+on that site: reading issues; creating an Epic, a Task and a Subtask with their
+parents and story points; links (`from` blocks `to`, which the live run
+corrected); a status transition together with story points and the marker
+comment; and re-running both CLIs, which created and wrote nothing the second
+time.
+
+Not yet seen on a live site: a transition that requires fields (for example
+`Resolution`), `fix-parents`, `update-descriptions`, `relates` and `duplicates`
+links, priorities, and team-managed versus company-managed differences. Treat
+your first run on your own site as supervised: start read-only and check the
+result in the Jira UI. [TESTING.md](TESTING.md) has a checklist.
+
+### Troubleshooting
+
+| Message contains | What to do |
+|---|---|
+| `is not filled in` | A `PREENCHE:` placeholder is still in `.jira.json` or in the credentials; replace it. |
+| `no Jira credentials` / `is readable by other users` | Set `JIRA_EMAIL` and `JIRA_API_TOKEN`, or create the credentials file and `chmod 600` it (see Jira credentials). |
+| `is not a site address` / `is plain http` | Fix `url` in `.jira.json`: `https://<site>.atlassian.net`. |
+| `the API token was rejected` | Wrong email or token, a revoked token, or an email that does not match the token: create a new token. |
+| `type '...' does not exist in '...'; available: ...` | Use one of the listed type names. |
+| `transition '...' requires '...'` / `field not supported, set it in Jira` | The transition needs a field: add it to `transition_fields` (the message lists the accepted options), or set it in Jira if its type is unsupported. |
+| `no field named ... on this site` / `several story points fields` | Set `story_points_field` in `.jira.json` to the field's `customfield_` id. |
+| `the issue may have been created` | A create ended in a network or server error: check Jira for the issue before re-running, and dry-run again first. |
 
 ## What it will not do
 

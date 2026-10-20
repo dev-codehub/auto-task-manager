@@ -1,4 +1,4 @@
-# redmine-sync, for Codex
+# auto-task-manager, for Codex
 
 This repository ships four Agent Skills (the open, cross-tool format —
 see https://agentskills.io) under `.agents/skills/`, symlinked to the same
@@ -16,7 +16,8 @@ Jira Cloud. There is one copy of each `SKILL.md`; both tools read it as-is.
    ```
 
    Put that line in your shell profile to make it permanent. Confirm with
-   `redmine-sync --version` (and `jira-sync --version` for the Jira skills).
+   `redmine-sync --version` (and `jira-sync --version` and `jira-backlog --version`
+   for the Jira skills).
 
 2. **Credentials and `.redmine.json`** are unchanged from the main
    [README](README.md) - same `REDMINE_API_KEY` / `~/.config/redmine-sync/credentials`,
@@ -30,7 +31,9 @@ Jira Cloud. There is one copy of each `SKILL.md`; both tools read it as-is.
    section: credentials are `JIRA_EMAIL` /
    `JIRA_API_TOKEN` or `~/.config/jira-sync/credentials` (see "Jira
    credentials" there), and each repository has a `.jira.json`
-   (`jira.example.json` is the template). A repository with both
+   (`jira.example.json` is the template; `jira.plan.example.json` and
+   `jira.update.example.json` are starting points for a backlog plan and a
+   session-update file). A repository with both
    `.redmine.json` and `.jira.json` is ambiguous: the skills stop and ask
    which tracker is meant. The token is never read, printed or asked for by
    the skill.

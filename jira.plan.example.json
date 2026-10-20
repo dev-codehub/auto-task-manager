@@ -1,0 +1,30 @@
+{
+  "project": "PROJ",
+  "nodes": [
+    {
+      "id": "T-01",
+      "subject": "T-01 Épico de teste",
+      "description": "Criado pelo teste do jira-backlog.\n\n- primeiro ponto\n- segundo ponto",
+      "type": "Epic",
+      "parent": null
+    },
+    {
+      "id": "T-02",
+      "subject": "T-02 Tarefa de teste",
+      "description": "Tarefa debaixo do épico.",
+      "type": "Task",
+      "story_points": 3,
+      "parent": "T-01"
+    },
+    {
+      "id": "T-03",
+      "subject": "T-03 Subtarefa de teste",
+      "description": "Subtarefa debaixo da tarefa.",
+      "type": "Subtask",
+      "parent": "T-02"
+    }
+  ],
+  "relations": [
+    {"type": "blocks", "from": "T-02", "to": "T-03"}
+  ]
+}
