@@ -1,0 +1,11 @@
+{
+  "session": "2026-01-15-teste-jira",
+  "updates": [
+    {
+      "issue": "PROJ-1",
+      "note": "Teste do **jira-sync**: tarefa concluída.\n\n- passou para o estado final\n- story points ajustados",
+      "status": "Done",
+      "story_points": 3
+    }
+  ]
+}
