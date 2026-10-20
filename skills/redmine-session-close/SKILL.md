@@ -34,10 +34,16 @@ update; the person approves it; only then is anything written.
    key silently disappears.
 
 3. **Write the update file** at `<updates_dir>/<session>.json`, where `<session>`
-   is today's date `YYYY-MM-DD`, suffixed `-2`, `-3`, ... if that file exists:
+   is today's date plus a short topic, `YYYY-MM-DD-<topic>` (lowercase, hyphens,
+   e.g. `2026-10-06-p2-diagnostics`). The session id is printed at the end of
+   every comment as `_redmine-sync: <session>_`, and the comment already carries
+   its own date, so a bare date tells the reader of the issue nothing; the topic
+   says what the update was and names its file. Use a different topic for a second
+   update on the same day, not `-2`. (A bare date still works; the dry-run only
+   notes it.)
 
    ```json
-   {"session": "YYYY-MM-DD", "updates": [
+   {"session": "YYYY-MM-DD-<topic>", "updates": [
      {"issue": "KEY", "note": "...", "done_ratio": 60, "status": "In Progress"}
    ]}
    ```
@@ -49,6 +55,15 @@ update; the person approves it; only then is anything written.
    - `done_ratio` and `status` (optional): only when the evidence supports a
      change; omit them otherwise. Use `Closed` (or the instance's equivalent)
      only when the work is finished and verified.
+   - `custom_fields` (optional, an object): only for the fields declared in
+     `.redmine.json`'s `required_fields_on_close`, keyed by their `key` there
+     (never by the field's numeric id or its display name). If this instance
+     declares any and the update closes an issue at 100% done, `redmine-sync
+     apply` reports an error naming the missing field(s) and the values each
+     accepts, rather than sending an incomplete write - fill them in and
+     dry-run again. Ask the person for the values rather than guessing; the
+     dry-run lists each field it will set, and its errors list what a field
+     accepts.
 
 4. **Dry-run:** `redmine-sync apply <file>`. If it reports errors, fix the file
    and dry-run again. Then show the person the complete output, unedited.

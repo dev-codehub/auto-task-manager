@@ -90,5 +90,23 @@ class UpdateFileTests(unittest.TestCase):
         self.assertIn("u.json", str(cm.exception))
 
 
+    def test_custom_fields_parses(self):
+        uf = parse_update_file(doc(
+            {"issue": "EX-01.1", "note": "n", "status": "Resolved", "done_ratio": 100,
+             "custom_fields": {"reviewed": "Yes", "risk": "Low"}}))
+        self.assertEqual(uf.updates[0].custom_fields, {"reviewed": "Yes", "risk": "Low"})
+
+    def test_custom_fields_defaults_to_empty(self):
+        uf = parse_update_file(doc({"issue": "EX-01.1", "note": "n"}))
+        self.assertEqual(uf.updates[0].custom_fields, {})
+
+    def test_custom_fields_rejects_bad_shape(self):
+        for bad in ("not an object", {"reviewed": 1}, {"reviewed": ""}, {"": "Yes"}):
+            with self.assertRaises(UpdateFileError) as cm:
+                parse_update_file(doc({"issue": "EX-01.1", "note": "n", "custom_fields": bad}))
+            self.assertIn("custom_fields", str(cm.exception))
+            self.assertNotIn("unknown key", str(cm.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

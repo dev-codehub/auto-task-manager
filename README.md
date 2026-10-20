@@ -46,7 +46,10 @@ The CLI refuses to read that file if others can read it.
   "project": "your-project-identifier",
   "text_format": "textile",
   "issue_key": "subject_prefix",
-  "updates_dir": "redmine/session-updates"
+  "updates_dir": "redmine/session-updates",
+  "required_fields_on_close": [
+    {"id": 1, "key": "reviewed", "name": "Reviewed", "values": ["Yes", "No"]}
+  ]
 }
 ```
 
@@ -54,6 +57,14 @@ The CLI refuses to read that file if others can read it.
 `markdown`, matching your instance. `issue_key` is `subject_prefix` (issues are
 named by the first word of their subject, e.g. `EX-01.2`) or `id_only`
 (`#1042` only). `#number` always works.
+
+`required_fields_on_close` is optional - leave it out unless your instance makes
+a custom field mandatory when an issue closes at 100% done; without it nothing
+changes. `id` is the field's numeric id (find it from a live issue that already
+has the field set - there is usually no non-admin API for the definition list),
+`name` is how Redmine labels it, `key` is what an update file's own
+`custom_fields` object calls it, and `values` is every value the field accepts,
+so a typo is caught before the write rather than as a live rejection.
 
 `redmine-backlog` always matches a plan file's node ids against existing
 issues by subject prefix (see below), so it refuses to run at all in a
@@ -63,13 +74,28 @@ repository configured with `issue_key: "id_only"`.
 
 ```bash
 redmine-sync status EX-01.2 '#1042'            # read-only
-redmine-sync apply redmine/session-updates/2026-01-15.json          # dry run
-redmine-sync apply redmine/session-updates/2026-01-15.json --write  # write
+redmine-sync apply redmine/session-updates/2026-01-15-onboarding-flow.json          # dry run
+redmine-sync apply redmine/session-updates/2026-01-15-onboarding-flow.json --write  # write
 ```
 
 Re-running `--write` is safe: each comment carries a
 `_redmine-sync: <session>_` line, and issues that already have it are skipped,
 so an interrupted run resumes where it stopped.
+
+Name the session `YYYY-MM-DD-<topic>` (e.g. `2026-01-15-onboarding-flow`): the
+id is the only part of the marker a reader of the issue sees, and the comment
+already carries its date. A bare date still works; the dry-run notes it.
+
+An update file may set `custom_fields` on a row: `{"issue": "EX-01.2", "note":
+"...", "status": "Closed", "done_ratio": 100, "custom_fields": {"reviewed":
+"Yes"}}`, keyed by the `key` that `.redmine.json`'s `required_fields_on_close`
+declares (never the numeric id or the display name). If a row closes an issue at
+100% done and that config declares any such fields, `apply` - dry run or
+`--write` - reports an error naming each missing field and the values it
+accepts, and sends nothing. A value outside the declared list is also an error,
+with the accepted ones listed. When the fields are complete they are sent in the
+same request that closes the issue and checked on the read-back, like status and
+% Done.
 
 ## Commands: redmine-backlog (create, relate, repair)
 

@@ -24,6 +24,7 @@ class FakeRedmine:
         self.workflow: Optional[Dict[int, Set[int]]] = None
         self.expose_allowed_statuses = False
         self.derived_done: Set[int] = set()
+        self.derived_custom_fields: Set[int] = set()
         self.forbidden: Set[int] = set()
         self.fail_puts_after: Optional[int] = None
         self.puts: List[Tuple[int, dict]] = []
@@ -130,6 +131,9 @@ class FakeRedmine:
             out["category"] = dict(issue["category"])
         if "description" in issue:
             out["description"] = issue["description"]
+        if issue.get("custom_fields"):
+            out["custom_fields"] = [{"id": i, "value": v}
+                                    for i, v in issue["custom_fields"].items()]
         if "journals" in include:
             out["journals"] = [dict(j) for j in issue["journals"]]
         if "allowed_statuses" in include and self.expose_allowed_statuses:
@@ -154,6 +158,12 @@ class FakeRedmine:
             issue["parent_id"] = fields["parent_issue_id"]
         if "description" in fields:
             issue["description"] = fields["description"]
+        if "custom_fields" in fields:
+            issue.setdefault("custom_fields", {})
+            for cf in fields["custom_fields"]:
+                if cf["id"] in self.derived_custom_fields:
+                    continue
+                issue["custom_fields"][cf["id"]] = cf["value"]
 
 
 def demo_fake(key: str = "test-key") -> FakeRedmine:

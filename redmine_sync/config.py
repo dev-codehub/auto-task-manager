@@ -5,7 +5,7 @@ import os
 import stat
 import urllib.parse
 from dataclasses import dataclass
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Tuple
 
 from .keys import unknown_keys_problem
 
@@ -13,11 +13,26 @@ CONFIG_NAME = ".redmine.json"
 CREDENTIALS_PATH = os.path.join("~", ".config", "redmine-sync", "credentials")
 TEXT_FORMATS = ("textile", "markdown")
 ISSUE_KEYS = ("subject_prefix", "id_only")
-_KNOWN_KEYS = {"url", "project", "text_format", "issue_key", "updates_dir"}
+_KNOWN_KEYS = {"url", "project", "text_format", "issue_key", "updates_dir",
+               "required_fields_on_close"}
 
 
 class ConfigError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class RequiredField:
+    """A custom field this Redmine instance requires filled before an issue may
+    close - found, not guessed: some instances make one mandatory only on the
+    transition to a closed status. `id` is the numeric custom field id the API
+    needs; `key` is what an update file's own `custom_fields` object names it;
+    `values` is every value the instance accepts, so a typo is caught in the
+    update file rather than as a live rejection."""
+    id: int
+    key: str
+    name: str
+    values: Tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -27,6 +42,7 @@ class Config:
     text_format: str = "textile"
     issue_key: str = "subject_prefix"
     updates_dir: str = "redmine/session-updates"
+    required_fields_on_close: Tuple[RequiredField, ...] = ()
     path: str = ""
 
 
@@ -68,9 +84,39 @@ def load_config(path: str) -> Config:
     updates_dir = raw.get("updates_dir", "redmine/session-updates")
     if not isinstance(updates_dir, str) or not updates_dir.strip():
         raise ConfigError(f"{path}: 'updates_dir' must be a non-empty string")
+    required_fields = _parse_required_fields(raw.get("required_fields_on_close", []), path)
     return Config(url=raw["url"].strip().rstrip("/"), project=raw["project"].strip(),
                   text_format=text_format, issue_key=issue_key,
-                  updates_dir=updates_dir, path=path)
+                  updates_dir=updates_dir, required_fields_on_close=required_fields, path=path)
+
+
+def _parse_required_fields(raw, path: str) -> Tuple[RequiredField, ...]:
+    if not isinstance(raw, list):
+        raise ConfigError(f"{path}: 'required_fields_on_close' must be a list")
+    fields = []
+    seen_keys = set()
+    for n, row in enumerate(raw, 1):
+        where = f"{path}: 'required_fields_on_close' item {n}"
+        if not isinstance(row, dict):
+            raise ConfigError(f"{where}: must be an object")
+        fid = row.get("id")
+        if not isinstance(fid, int) or isinstance(fid, bool):
+            raise ConfigError(f"{where}: 'id' must be an integer (the custom field id)")
+        key = row.get("key")
+        if not isinstance(key, str) or not key.strip():
+            raise ConfigError(f"{where}: 'key' must be a non-empty string")
+        if key in seen_keys:
+            raise ConfigError(f"{where}: duplicate key '{key}'")
+        seen_keys.add(key)
+        name = row.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigError(f"{where}: 'name' must be a non-empty string")
+        values = row.get("values")
+        if not isinstance(values, list) or not values or \
+                not all(isinstance(v, str) and v.strip() for v in values):
+            raise ConfigError(f"{where}: 'values' must be a non-empty list of non-empty strings")
+        fields.append(RequiredField(id=fid, key=key, name=name, values=tuple(values)))
+    return tuple(fields)
 
 
 _LOOPBACK = {"localhost", "127.0.0.1", "::1"}

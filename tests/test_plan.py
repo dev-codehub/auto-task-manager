@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from redmine_sync.client import Client
-from redmine_sync.config import Config
+from redmine_sync.config import Config, RequiredField
 from redmine_sync.plan import build_plan, has_marker, marker_line, subject_key, with_marker
 from redmine_sync.render import format_plan
 from redmine_sync.updatefile import Update, UpdateFile
@@ -134,6 +134,22 @@ class PlanTests(unittest.TestCase):
         p = self.plan(Update("EX-01.1", "a", done_ratio=30))
         self.assertTrue(any("goes down" in w for w in p.rows[0].warnings))
 
+    def test_a_date_only_session_warns_and_suggests_a_topic(self):
+        # The marker is the only thing a reader sees in Redmine, and the
+        # comment already carries its date. A bare date (or date-N) says nothing.
+        for bare in ("2026-10-06", "2026-10-06-2"):
+            p = self.plan(Update("EX-01.1", "a"), session=bare)
+            self.assertTrue(p.ok, p.errors)  # a warning, never a block
+            self.assertTrue(any("only a date" in w for w in p.warnings), bare)
+
+    def test_a_session_with_a_topic_does_not_warn(self):
+        p = self.plan(Update("EX-01.1", "a"), session="2026-10-06-p2-diagnostics")
+        self.assertEqual(p.warnings, [])
+
+    def test_the_dry_run_shows_the_session_warning(self):
+        text = format_plan(self.plan(Update("EX-01.1", "a"), session="2026-10-06"))
+        self.assertIn("only a date", text)
+
     def test_done_not_multiple_of_ten_warns(self):
         p = self.plan(Update("EX-01.1", "a", done_ratio=45))
         self.assertTrue(any("multiple of 10" in w for w in p.rows[0].warnings))
@@ -190,6 +206,65 @@ class PlanTests(unittest.TestCase):
         self.assertIn("0% -> 50%", text)
         self.assertIn("| line one", text)
         self.assertIn("nothing will be written", text)
+
+
+class RequiredFieldsOnCloseTests(unittest.TestCase):
+    def setUp(self):
+        self.fake = demo_fake().start()
+        self.client = Client(self.fake.url, self.fake.key)
+        self.config = Config(url=self.fake.url, project="demo", required_fields_on_close=(
+            RequiredField(id=1, key="reviewed", name="Reviewed", values=("Yes", "No")),
+        ))
+
+    def tearDown(self):
+        self.fake.stop()
+
+    def plan(self, *updates):
+        return build_plan(self.client, self.config, UpdateFile("s1", list(updates)))
+
+    def test_closing_at_100_without_the_field_is_an_error(self):
+        p = self.plan(Update("EX-01.1", "a", status="Closed", done_ratio=100))
+        self.assertFalse(p.ok)
+        self.assertIn("Reviewed", p.errors[0])
+
+    def test_missing_field_error_lists_the_accepted_values(self):
+        p = self.plan(Update("EX-01.1", "a", status="Closed", done_ratio=100))
+        self.assertIn("Reviewed (Yes, No)", p.errors[0])
+
+    def test_closing_at_100_with_the_field_is_accepted(self):
+        p = self.plan(Update("EX-01.1", "a", status="Closed", done_ratio=100,
+                             custom_fields={"reviewed": "Yes"}))
+        self.assertTrue(p.ok, p.errors)
+        self.assertEqual(p.rows[0].custom_fields, [(1, "Reviewed", "Yes")])
+
+    def test_closing_below_100_does_not_require_the_field(self):
+        p = self.plan(Update("EX-01.1", "a", status="Closed", done_ratio=50))
+        self.assertTrue(p.ok, p.errors)
+
+    def test_not_closing_does_not_require_the_field(self):
+        p = self.plan(Update("EX-01.1", "a", status="In Progress", done_ratio=100))
+        self.assertTrue(p.ok, p.errors)
+
+    def test_unknown_custom_field_key_is_an_error(self):
+        p = self.plan(Update("EX-01.1", "a", custom_fields={"nope": "x"}))
+        self.assertFalse(p.ok)
+        self.assertIn("unknown custom field", p.errors[0])
+
+    def test_value_not_in_the_declared_list_is_an_error(self):
+        p = self.plan(Update("EX-01.1", "a", custom_fields={"reviewed": "Maybe"}))
+        self.assertFalse(p.ok)
+        self.assertIn("not one of: Yes, No", p.errors[0])
+
+    def test_field_is_resolved_even_when_not_closing(self):
+        p = self.plan(Update("EX-01.1", "a", status="In Progress",
+                             custom_fields={"reviewed": "No"}))
+        self.assertTrue(p.ok, p.errors)
+        self.assertEqual(p.rows[0].custom_fields, [(1, "Reviewed", "No")])
+
+    def test_dry_run_shows_the_field_that_will_be_set(self):
+        text = format_plan(self.plan(Update("EX-01.1", "a", status="Closed", done_ratio=100,
+                                            custom_fields={"reviewed": "Yes"})))
+        self.assertIn("Reviewed = Yes", text)
 
 
 if __name__ == "__main__":
